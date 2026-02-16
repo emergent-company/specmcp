@@ -62,7 +62,7 @@ func handleUpgradeCommand(args []string) {
 	if latestRelease.Body != "" && !quiet {
 		fmt.Printf("\n=== What's New in %s ===\n", latestVersion)
 		fmt.Println(latestRelease.Body)
-		fmt.Println("=====================================\n")
+		fmt.Println("=====================================")
 	}
 
 	// Pre-upgrade health checks (Priority 4)
