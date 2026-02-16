@@ -59,8 +59,11 @@ jobs:
       - name: Create archive
         run: |
           cd dist
-          tar -czvf specmcp-${{ matrix.platform }}.tar.gz specmcp-${{ matrix.platform }}
+          # Rename binary to just 'specmcp' for the archive
+          cp specmcp-${{ matrix.platform }} specmcp
+          tar -czvf specmcp-${{ matrix.platform }}.tar.gz specmcp
           sha256sum specmcp-${{ matrix.platform }}.tar.gz > specmcp-${{ matrix.platform }}.tar.gz.sha256
+          rm specmcp
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
