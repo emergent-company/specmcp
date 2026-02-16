@@ -1,0 +1,30 @@
+# SpecMCP Configuration
+# Installed by the Arch package at /etc/specmcp/config.toml
+#
+# Override settings with environment variables or by editing this file.
+# After changes, restart the service: sudo systemctl restart specmcp
+
+[server]
+name = "specmcp"
+version = "0.1.0"
+
+[emergent]
+# The URL will use the default http://localhost:3002
+# Clients provide their own Emergent tokens via Bearer header
+url = "http://localhost:3002"
+
+[transport]
+mode = "http"
+host = "0.0.0.0"
+port = "21452"
+cors_origins = "*"
+
+[log]
+level = "info"
+
+[janitor]
+# Janitor is disabled by default in HTTP mode (stateless)
+# It can only run in stdio mode with persistent connections
+enabled = false
+interval_hours = 1
+create_proposal = false

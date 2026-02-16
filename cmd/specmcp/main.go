@@ -63,9 +63,18 @@ func main() {
 
 func run() error {
 	// Handle subcommands before flag parsing.
-	if len(os.Args) > 1 && os.Args[1] == "info" {
-		runInfo(os.Args[2:])
-		return nil
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "info":
+			runInfo(os.Args[2:])
+			return nil
+		case "version":
+			runVersion()
+			return nil
+		case "upgrade":
+			handleUpgradeCommand(os.Args[2:])
+			return nil
+		}
 	}
 
 	// Parse flags

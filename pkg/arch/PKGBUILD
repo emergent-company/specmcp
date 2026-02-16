@@ -1,0 +1,43 @@
+# Maintainer: Emergent Company <hello@emergent.company>
+pkgname=specmcp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SpecMCP - Spec-driven development MCP server backed by Emergent"
+arch=('x86_64' 'aarch64')
+url="https://github.com/emergent-company/specmcp"
+license=('MIT')
+depends=('glibc')
+makedepends=('go' 'git')
+backup=('etc/specmcp/config.toml')
+source=()
+
+# When building from local source, run: makepkg -si
+# The PKGBUILD expects to be run from the repo root or with the repo available
+
+build() {
+    cd "$startdir/../.."
+
+    local _version
+    _version=$(git describe --tags --always --dirty 2>/dev/null || echo "$pkgver")
+
+    echo "Building specmcp ${_version}..."
+    CGO_ENABLED=0 go build \
+        -ldflags="-s -w -X main.Version=${_version}" \
+        -o "${srcdir}/specmcp" \
+        ./cmd/specmcp
+}
+
+package() {
+    # Install binary
+    install -Dm755 "${srcdir}/specmcp" "${pkgdir}/usr/bin/specmcp"
+
+    # Install systemd service
+    install -Dm644 "${startdir}/specmcp.service" "${pkgdir}/usr/lib/systemd/system/specmcp.service"
+
+    # Install default config
+    install -Dm644 "${startdir}/specmcp.config.toml" "${pkgdir}/etc/specmcp/config.toml"
+
+    # Create data directory
+    install -dm755 "${pkgdir}/var/lib/specmcp"
+    install -dm755 "${pkgdir}/var/log/specmcp"
+}

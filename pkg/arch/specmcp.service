@@ -1,0 +1,45 @@
+[Unit]
+Description=SpecMCP Server
+Documentation=https://github.com/emergent-company/specmcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/specmcp
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/var/lib/specmcp
+
+# Configuration
+Environment=SPECMCP_TRANSPORT=http
+Environment=SPECMCP_PORT=21452
+Environment=SPECMCP_LOG_LEVEL=info
+Environment=HOME=/var/lib/specmcp
+
+# Point to system config
+Environment=SPECMCP_CONFIG=/etc/specmcp/config.toml
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=specmcp
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/specmcp /var/log/specmcp
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
