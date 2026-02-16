@@ -631,6 +631,125 @@
         }
       }
     },
+    "App": {
+      "type": "object",
+      "description": "A deployable application in the monorepo. Can be frontend, backend, desktop, mobile, CLI tool, or library.",
+      "required": ["name", "app_type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique identifier (e.g. 'web-frontend', 'auth-service', 'admin-desktop')"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name (e.g. 'Web Frontend Application')"
+        },
+        "app_type": {
+          "type": "string",
+          "enum": ["frontend", "backend", "desktop", "mobile", "cli", "library"],
+          "description": "Type of application"
+        },
+        "platform": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Target platforms (e.g. ['web'], ['ios', 'android'], ['macos', 'windows', 'linux'])"
+        },
+        "root_path": {
+          "type": "string",
+          "description": "Root directory in monorepo (e.g. 'apps/web', 'services/auth', 'desktop/admin')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Purpose and scope of this application"
+        },
+        "tech_stack": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Main technologies (e.g. ['react', 'typescript', 'vite'], ['go', 'grpc'])"
+        },
+        "instructions": {
+          "type": "string",
+          "description": "App-specific instructions for setup, build, run, test, and deployment"
+        },
+        "deployment_target": {
+          "type": "string",
+          "description": "Where this app deploys (e.g. 'vercel', 'kubernetes', 'app-store', 'npm')"
+        },
+        "entry_point": {
+          "type": "string",
+          "description": "Main entry file (e.g. 'src/main.tsx', 'cmd/server/main.go')"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Default port for local development (if applicable)"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key external dependencies (package names)"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Namespaced tags (e.g. 'layer:frontend', 'status:production', 'team:platform')"
+        }
+      }
+    },
+    "DataModel": {
+      "type": "object",
+      "description": "A domain data type shared across the system. Can be defined in one app and consumed by others.",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique identifier (e.g. 'User', 'Organization', 'Payment')"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name (e.g. 'User Profile')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Purpose and structure of this model"
+        },
+        "platform": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Platforms where this model is defined (e.g. ['go', 'typescript', 'swift'])"
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Primary definition file (e.g. 'models/user.go', 'types/User.ts')"
+        },
+        "go_type": {
+          "type": "string",
+          "description": "Go struct name if different from name"
+        },
+        "swift_type": {
+          "type": "string",
+          "description": "Swift struct name if different from name"
+        },
+        "ts_type": {
+          "type": "string",
+          "description": "TypeScript interface/type name if different from name"
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key field names"
+        },
+        "persistence": {
+          "type": "string",
+          "enum": ["database", "memory", "cache", "none"],
+          "description": "Where this model is persisted"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Namespaced tags"
+        }
+      }
+    },
     "GraphSync": {
       "type": "object",
       "description": "Tracks synchronization state between the Emergent graph and the codebase.",
@@ -667,7 +786,7 @@
     },
     "uses_pattern": {
       "description": "Entity uses a reusable implementation pattern",
-      "sourceTypes": ["Context", "UIComponent", "Action", "ScenarioStep"],
+      "sourceTypes": ["App", "Context", "UIComponent", "Action", "ScenarioStep"],
       "targetTypes": ["Pattern"],
       "cardinality": "many-to-many"
     },
@@ -852,6 +971,42 @@
       "sourceTypes": ["Spec", "Context", "UIComponent", "Action"],
       "targetTypes": ["CodingAgent"],
       "cardinality": "many-to-one"
+    },
+    "belongs_to_app": {
+      "description": "Entity belongs to an app (implementation artifact owned by app)",
+      "sourceTypes": ["Context", "UIComponent", "Action", "APIContract"],
+      "targetTypes": ["App"],
+      "cardinality": "many-to-one"
+    },
+    "scoped_to_app": {
+      "description": "Workflow artifact affects or is scoped to specific app(s)",
+      "sourceTypes": ["Change", "Spec", "Requirement", "Design", "Task"],
+      "targetTypes": ["App"],
+      "cardinality": "many-to-many"
+    },
+    "depends_on_app": {
+      "description": "App depends on another app at runtime (e.g. frontend calls backend API)",
+      "sourceTypes": ["App"],
+      "targetTypes": ["App"],
+      "cardinality": "many-to-many"
+    },
+    "provides_model": {
+      "description": "App owns and defines a DataModel (source of truth)",
+      "sourceTypes": ["App"],
+      "targetTypes": ["DataModel"],
+      "cardinality": "one-to-many"
+    },
+    "consumes_model": {
+      "description": "App uses a DataModel from another app (consumer)",
+      "sourceTypes": ["App"],
+      "targetTypes": ["DataModel"],
+      "cardinality": "many-to-many"
+    },
+    "exposes_api": {
+      "description": "App exposes an API contract for external consumption",
+      "sourceTypes": ["App"],
+      "targetTypes": ["APIContract"],
+      "cardinality": "one-to-many"
     }
   },
   "ui_configs": {},

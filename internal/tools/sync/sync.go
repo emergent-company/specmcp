@@ -138,7 +138,7 @@ func (t *GraphSummary) Execute(ctx context.Context, params json.RawMessage) (*mc
 		emergent.TypeCodingAgent, emergent.TypePattern, emergent.TypeConstitution,
 		emergent.TypeTestCase, emergent.TypeAPIContract, emergent.TypeContext,
 		emergent.TypeUIComponent, emergent.TypeAction, emergent.TypeDataModel,
-		emergent.TypeService, emergent.TypeGraphSync,
+		emergent.TypeApp, emergent.TypeGraphSync,
 	}
 
 	// Fetch all entity counts in parallel

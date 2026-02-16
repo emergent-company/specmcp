@@ -123,7 +123,7 @@ func run() error {
 	registry.Register(query.NewGetComponent(emFactory))
 	registry.Register(query.NewGetAction(emFactory))
 	registry.Register(query.NewGetDataModel(emFactory))
-	registry.Register(query.NewGetService(emFactory))
+	registry.Register(query.NewGetApp(emFactory))
 	registry.Register(query.NewGetScenario(emFactory))
 	registry.Register(query.NewGetPatterns(emFactory))
 	registry.Register(query.NewImpactAnalysis(emFactory))
@@ -153,6 +153,8 @@ func run() error {
 	// Register prompts
 	registry.RegisterPrompt(&content.GuidePrompt{})
 	registry.RegisterPrompt(&content.WorkflowPrompt{})
+	registry.RegisterPrompt(&content.StartChangePrompt{})
+	registry.RegisterPrompt(&content.SetupAppPrompt{})
 
 	// Register resources
 	registry.RegisterResource(&content.EntityModelResource{})

@@ -209,7 +209,7 @@ func NewGetDataModel(factory *emergent.ClientFactory) *GetDataModel {
 
 func (t *GetDataModel) Name() string { return "spec_get_data_model" }
 func (t *GetDataModel) Description() string {
-	return "Get a DataModel with its service, related API contracts, patterns, and other models that reference it."
+	return "Get a DataModel with its provider app, consumer apps, related API contracts, and patterns."
 }
 func (t *GetDataModel) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
@@ -238,8 +238,8 @@ func (t *GetDataModel) Execute(ctx context.Context, params json.RawMessage) (*mc
 	}
 
 	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
-		emergent.RelBelongsToService,
-		emergent.RelUsesModel,
+		emergent.RelProvidesModel, // Reverse: which app provides this model
+		emergent.RelConsumesModel, // Reverse: which apps consume this model
 		emergent.RelUsesPattern,
 	}, 1)
 	if err != nil {
@@ -249,37 +249,37 @@ func (t *GetDataModel) Execute(ctx context.Context, params json.RawMessage) (*mc
 	return mcp.JSONResult(buildEntityResponse(obj, expanded))
 }
 
-// --- spec_get_service ---
+// --- spec_get_app ---
 
-type getServiceParams struct {
+type getAppParams struct {
 	ID   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
 }
 
-type GetService struct {
+type GetApp struct {
 	factory *emergent.ClientFactory
 }
 
-func NewGetService(factory *emergent.ClientFactory) *GetService {
-	return &GetService{factory: factory}
+func NewGetApp(factory *emergent.ClientFactory) *GetApp {
+	return &GetApp{factory: factory}
 }
 
-func (t *GetService) Name() string { return "spec_get_service" }
-func (t *GetService) Description() string {
-	return "Get a Service (backend subsystem/package) with its API contracts, data models, and patterns."
+func (t *GetApp) Name() string { return "spec_get_app" }
+func (t *GetApp) Description() string {
+	return "Get an App (deployable application) with its API contracts, data models, contexts, components, actions, dependencies, and patterns."
 }
-func (t *GetService) InputSchema() json.RawMessage {
+func (t *GetApp) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
-    "id": {"type": "string", "description": "Service entity ID"},
-    "name": {"type": "string", "description": "Service name (used if id not provided)"}
+    "id": {"type": "string", "description": "App entity ID"},
+    "name": {"type": "string", "description": "App name (used if id not provided)"}
   }
 }`)
 }
 
-func (t *GetService) Execute(ctx context.Context, params json.RawMessage) (*mcp.ToolsCallResult, error) {
-	var p getServiceParams
+func (t *GetApp) Execute(ctx context.Context, params json.RawMessage) (*mcp.ToolsCallResult, error) {
+	var p getAppParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
@@ -289,7 +289,7 @@ func (t *GetService) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return nil, fmt.Errorf("creating client: %w", err)
 	}
 
-	obj, err := resolveEntity(ctx, client, emergent.TypeService, p.ID, p.Name)
+	obj, err := resolveEntity(ctx, client, emergent.TypeApp, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
@@ -297,11 +297,14 @@ func (t *GetService) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelExposesAPI,
 		emergent.RelProvidesModel,
-		emergent.RelBelongsToService,
+		emergent.RelConsumesModel,
+		emergent.RelBelongsToApp, // Reverse: get entities that belong to this app
+		emergent.RelScopedToApp,  // Reverse: get changes/specs scoped to this app
+		emergent.RelDependsOnApp,
 		emergent.RelUsesPattern,
 	}, 1)
 	if err != nil {
-		return nil, fmt.Errorf("expanding service: %w", err)
+		return nil, fmt.Errorf("expanding app: %w", err)
 	}
 
 	return mcp.JSONResult(buildEntityResponse(obj, expanded))

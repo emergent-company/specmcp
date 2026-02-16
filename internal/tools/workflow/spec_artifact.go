@@ -35,7 +35,7 @@ func NewSpecArtifact(factory *emergent.ClientFactory) *SpecArtifact {
 func (t *SpecArtifact) Name() string { return "spec_artifact" }
 
 func (t *SpecArtifact) Description() string {
-	return "Add an artifact to an existing change. Supports: spec (with requirements and scenarios), design, task, actor, pattern, test_case, api_contract, context, ui_component, action, data_model, service, scenario_step. Enforces workflow ordering guards: Proposal → Spec → Design → Tasks. Automatically creates version-aware change tracking relationships (change_creates, change_modifies, change_references) for shared entities."
+	return "Add an artifact to an existing change. Supports: spec (with requirements and scenarios), design, task, actor, pattern, test_case, api_contract, context, ui_component, action, data_model, app, scenario_step. Enforces workflow ordering guards: Proposal → Spec → Design → Tasks. Automatically creates version-aware change tracking relationships (change_creates, change_modifies, change_references) for shared entities."
 }
 
 func (t *SpecArtifact) InputSchema() json.RawMessage {
@@ -49,7 +49,7 @@ func (t *SpecArtifact) InputSchema() json.RawMessage {
     "artifact_type": {
       "type": "string",
       "description": "Type of artifact to add",
-      "enum": ["proposal", "spec", "design", "task", "actor", "coding_agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "data_model", "service", "requirement", "scenario", "scenario_step", "constitution"]
+      "enum": ["proposal", "spec", "design", "task", "actor", "coding_agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "data_model", "app", "requirement", "scenario", "scenario_step", "constitution"]
     },
     "content": {
       "type": "object",
@@ -138,8 +138,8 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return t.addGenericEntity(ctx, client, emergent.TypeAction, p.Content, nil, p.ChangeID)
 	case "data_model":
 		return t.addGenericEntity(ctx, client, emergent.TypeDataModel, p.Content, nil, p.ChangeID)
-	case "service":
-		return t.addGenericEntity(ctx, client, emergent.TypeService, p.Content, nil, p.ChangeID)
+	case "app":
+		return t.addGenericEntity(ctx, client, emergent.TypeApp, p.Content, nil, p.ChangeID)
 	case "constitution":
 		return t.addConstitution(ctx, client, p.ChangeID, p.Content)
 	default:
@@ -824,30 +824,34 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, client *em
 		}
 	}
 
-	// Handle service_id: create belongs_to_service (this entity → Service)
-	if serviceID := getString(content, "service_id"); serviceID != "" {
-		created, err := ensureRel(emergent.RelBelongsToService, entityID, serviceID)
+	// Handle app_id: create belongs_to_app (this entity → App)
+	// Applicable for Context, UIComponent, Action, APIContract
+	if appID := getString(content, "app_id"); appID != "" {
+		created, err := ensureRel(emergent.RelBelongsToApp, entityID, appID)
 		if err != nil {
-			results = append(results, fmt.Sprintf("belongs_to_service → %s failed: %v", serviceID, err))
+			results = append(results, fmt.Sprintf("belongs_to_app → %s failed: %v", appID, err))
 		} else if created {
-			results = append(results, fmt.Sprintf("belongs_to_service → %s", serviceID))
+			results = append(results, fmt.Sprintf("belongs_to_app → %s", appID))
 		} else {
-			results = append(results, fmt.Sprintf("belongs_to_service → %s (already exists)", serviceID))
+			results = append(results, fmt.Sprintf("belongs_to_app → %s (already exists)", appID))
 		}
 	}
 
-	// Handle model_ids: create uses_model (this entity → each DataModel)
-	if modelIDs := getStringSlice(content, "model_ids"); len(modelIDs) > 0 {
-		for _, modelID := range modelIDs {
-			created, err := ensureRel(emergent.RelUsesModel, entityID, modelID)
-			if err != nil {
-				results = append(results, fmt.Sprintf("uses_model → %s failed: %v", modelID, err))
-				continue
-			}
-			if created {
-				results = append(results, fmt.Sprintf("uses_model → %s", modelID))
-			} else {
-				results = append(results, fmt.Sprintf("uses_model → %s (already exists)", modelID))
+	// Handle consumed_model_ids: create consumes_model (this App → each DataModel)
+	// Only for App entities
+	if typeName == emergent.TypeApp {
+		if modelIDs := getStringSlice(content, "consumed_model_ids"); len(modelIDs) > 0 {
+			for _, modelID := range modelIDs {
+				created, err := ensureRel(emergent.RelConsumesModel, entityID, modelID)
+				if err != nil {
+					results = append(results, fmt.Sprintf("consumes_model → %s failed: %v", modelID, err))
+					continue
+				}
+				if created {
+					results = append(results, fmt.Sprintf("consumes_model → %s", modelID))
+				} else {
+					results = append(results, fmt.Sprintf("consumes_model → %s (already exists)", modelID))
+				}
 			}
 		}
 	}
@@ -870,8 +874,8 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, client *em
 		}
 	}
 
-	// Handle api_ids: create exposes_api (this Service → each APIContract)
-	if typeName == emergent.TypeService {
+	// Handle api_ids: create exposes_api (this App → each APIContract)
+	if typeName == emergent.TypeApp {
 		if apiIDs := getStringSlice(content, "api_ids"); len(apiIDs) > 0 {
 			for _, apiID := range apiIDs {
 				created, err := ensureRel(emergent.RelExposesAPI, entityID, apiID)

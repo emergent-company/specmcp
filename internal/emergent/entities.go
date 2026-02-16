@@ -348,6 +348,74 @@ func (c *Client) ListTasks(ctx context.Context, changeID string) ([]*Task, error
 	return tasks, nil
 }
 
+// --- App ---
+
+// CreateApp creates a new App entity.
+func (c *Client) CreateApp(ctx context.Context, app *App) (*App, error) {
+	props, err := toProps(app)
+	if err != nil {
+		return nil, err
+	}
+	obj, err := c.CreateObject(ctx, TypeApp, strPtr(app.Name), props, app.Tags)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fromProps[App](obj)
+	if err != nil {
+		return nil, err
+	}
+	result.ID = obj.ID
+	return result, nil
+}
+
+// GetApp retrieves an App by ID.
+func (c *Client) GetApp(ctx context.Context, id string) (*App, error) {
+	obj, err := c.GetObject(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fromProps[App](obj)
+	if err != nil {
+		return nil, err
+	}
+	result.ID = obj.ID
+	return result, nil
+}
+
+// --- DataModel ---
+
+// CreateDataModel creates a new DataModel entity.
+func (c *Client) CreateDataModel(ctx context.Context, model *DataModel) (*DataModel, error) {
+	props, err := toProps(model)
+	if err != nil {
+		return nil, err
+	}
+	obj, err := c.CreateObject(ctx, TypeDataModel, strPtr(model.Name), props, model.Tags)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fromProps[DataModel](obj)
+	if err != nil {
+		return nil, err
+	}
+	result.ID = obj.ID
+	return result, nil
+}
+
+// GetDataModel retrieves a DataModel by ID.
+func (c *Client) GetDataModel(ctx context.Context, id string) (*DataModel, error) {
+	obj, err := c.GetObject(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fromProps[DataModel](obj)
+	if err != nil {
+		return nil, err
+	}
+	result.ID = obj.ID
+	return result, nil
+}
+
 // --- Generic entity retrieval by expand ---
 
 // GetEntityWithRelationships retrieves an entity and its immediate relationships.

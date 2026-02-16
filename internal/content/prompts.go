@@ -643,3 +643,342 @@ A Constitution can mandate or forbid patterns:
 - **forbids_pattern**: Change must not use this pattern
 Use spec_validate_constitution to check compliance.
 `
+
+// --- start-change prompt ---
+
+// StartChangePrompt guides an LLM through creating a new change interactively.
+type StartChangePrompt struct{}
+
+func (p *StartChangePrompt) Definition() mcp.PromptDefinition {
+	return mcp.PromptDefinition{
+		Name:        "start-change",
+		Description: "Interactive guide for starting a new change. Asks clarifying questions and walks through the spec-driven workflow with monorepo support.",
+		Arguments:   []mcp.PromptArgument{},
+	}
+}
+
+func (p *StartChangePrompt) Get(arguments map[string]string) (*mcp.PromptsGetResult, error) {
+	return &mcp.PromptsGetResult{
+		Description: "Interactive guide for starting a new change",
+		Messages: []mcp.PromptMessage{
+			{
+				Role:    "user",
+				Content: mcp.TextContent(startChangeGuide),
+			},
+		},
+	}, nil
+}
+
+const startChangeGuide = `# Start a New Change - Interactive Guide
+
+You are helping a user create a new change in SpecMCP using spec-driven development.
+
+## Workflow Overview
+
+Changes follow this progression:
+**Proposal (Why) → Specs (What) → Design (How) → Tasks (Steps)**
+
+## Your Role
+
+1. Ask clarifying questions to understand what the user wants
+2. Help articulate the change properly
+3. Guide through each stage
+4. Create artifacts using SpecMCP tools
+
+## Step 1: Gather Context
+
+Ask these questions:
+
+**Basic Info:**
+- What are you building/fixing/improving? (one sentence)
+- What problem does this solve? (the "why")
+- Who is affected? (users, systems, teams)
+- Is this a new feature, bug fix, enhancement, or refactor?
+
+**Monorepo Context (CRITICAL!):**
+- Which apps are affected? (e.g., web-frontend, auth-service)
+- Are you creating a new app?
+- Does this involve shared data models between apps?
+
+## Step 2: Create Change
+
+Once you have context, create the change with spec_new.
+
+**Name must be kebab-case:**
+- ✓ add-user-notifications
+- ✓ fix-login-redirect  
+- ✗ AddUserNotifications (no PascalCase)
+- ✗ add_user_notifications (no underscores)
+
+## Step 3: Proposal (Why)
+
+Ask:
+- What's IN scope? What's OUT of scope?
+- What are the risks?
+- Any breaking changes?
+
+Create proposal with spec_artifact (artifact_type: "proposal").
+Fields: intent (required), scope, impact.
+
+Then mark ready with spec_mark_ready.
+
+## Step 4: Specs (What)
+
+Ask:
+- What domains are affected? (auth, UI, API, data)
+- For each domain: What behaviors need to change?
+
+Create specs with spec_artifact (artifact_type: "spec").
+Use scoped_to_apps field for monorepo!
+
+For each spec, add:
+- Requirements (artifact_type: "requirement")  
+  Use MUST/SHOULD/MAY strength
+- Scenarios (artifact_type: "scenario")  
+  Use Given/When/Then format
+
+Mark ready bottom-up:
+1. Scenarios → 2. Requirements → 3. Specs
+
+## Step 5: Apps & Models (if new)
+
+If creating new apps, use artifact_type: "app"
+Fields: name, app_type (frontend/backend/mobile/desktop/cli), platform, root_path, tech_stack, instructions, port
+
+If creating data models, use artifact_type: "data_model"  
+Fields: name, platform, file_path, fields, persistence
+
+Link: which app provides? which apps consume?
+
+## Step 6: Design (How)
+
+Ask:
+- How will you implement this?
+- Key technical decisions?
+- How does data flow?
+- Which files will change?
+
+Create design with spec_artifact (artifact_type: "design").
+Fields: approach, decisions, data_flow, file_changes, scoped_to_apps
+
+Mark ready with spec_mark_ready.
+
+## Step 7: Tasks
+
+Auto-generate with spec_generate_tasks
+Or create manually (artifact_type: "task")
+
+## Key Principles
+
+1. **Ask before assuming** - Don't guess, ask questions
+2. **Use kebab-case** - Always lowercase with hyphens
+3. **Think monorepo** - Always ask which apps
+4. **Mark ready bottom-up** - Children before parents
+5. **Check status** - Use spec_status often
+6. **Enforce readiness** - Can't skip stages
+
+## Helpful Tools
+
+- spec_status - Check readiness and next steps
+- spec_list_changes - See all changes
+- spec_get_app - Get app details
+- spec_verify - Check before archiving
+
+## Common Mistakes
+
+✗ Creating specs before proposal ready
+✗ Skipping readiness marking
+✗ Wrong naming (underscores/capitals)
+✗ Forgetting to ask about apps (monorepo!)
+✗ Guessing requirements
+
+## Start Now!
+
+Ask: "What are you trying to build, fix, or improve?"
+
+Then follow the steps above, asking questions at each stage.
+`
+
+// --- setup-app prompt ---
+
+// SetupAppPrompt helps configure a new app in the monorepo.
+type SetupAppPrompt struct{}
+
+func (p *SetupAppPrompt) Definition() mcp.PromptDefinition {
+	return mcp.PromptDefinition{
+		Name:        "setup-app",
+		Description: "Guide for adding a new app to the monorepo. Helps gather app configuration and create relationships.",
+		Arguments: []mcp.PromptArgument{
+			{
+				Name:        "app_type",
+				Description: "Type of app: frontend, backend, mobile, desktop, or cli",
+				Required:    false,
+			},
+		},
+	}
+}
+
+func (p *SetupAppPrompt) Get(arguments map[string]string) (*mcp.PromptsGetResult, error) {
+	appType := arguments["app_type"]
+	text := buildSetupAppGuide(appType)
+	
+	return &mcp.PromptsGetResult{
+		Description: "Guide for setting up a new app in the monorepo",
+		Messages: []mcp.PromptMessage{
+			{
+				Role:    "user",
+				Content: mcp.TextContent(text),
+			},
+		},
+	}, nil
+}
+
+func buildSetupAppGuide(appType string) string {
+	guide := `# Setup New App - Configuration Guide
+
+You are helping configure a new app in the monorepo.
+
+## Questions to Ask
+
+### Basic Info
+- App name? (kebab-case, e.g., web-frontend, auth-service)
+- App type? (frontend, backend, mobile, desktop, cli, library)
+- Description? (one sentence purpose)
+
+### Platform & Tech
+- Target platform? (web, ios, android, macos, windows, linux, go, node)
+- Tech stack? (e.g., react+typescript, go+grpc, flutter)
+- Entry point? (main file, e.g., src/main.tsx, cmd/server/main.go)
+
+### Development
+- Root directory? (e.g., apps/web, services/auth)
+- Local port? (for dev server, if applicable)
+- Setup instructions? (install, build, run, test commands)
+
+### Deployment
+- Where does it deploy? (vercel, kubernetes, app-store, npm, docker)
+- Any special deployment config?
+
+### Dependencies
+- Which apps does it depend on at runtime?
+- Which data models does it consume from other apps?
+- Which data models does it provide to other apps?
+- Key external dependencies? (packages/libraries)
+
+### API & Patterns
+- Does it expose APIs? (if yes, which contracts)
+- Which patterns should it follow?
+
+## Create the App
+
+Use spec_artifact with artifact_type: "app":
+
+Required fields:
+- name (kebab-case)
+- app_type (frontend/backend/mobile/desktop/cli/library)
+
+Common fields:
+- platform (array, e.g., ["web"], ["go"])
+- root_path (directory in monorepo)
+- tech_stack (array of technologies)
+- instructions (how to run)
+- deployment_target (where it deploys)
+- entry_point (main file)
+- port (local dev port)
+- dependencies (key packages)
+
+## Link Data Models
+
+If app provides models:
+1. Create DataModel entities (artifact_type: "data_model")
+2. Specify which app provides them
+
+If app consumes models:
+1. Link with consumed_model_ids field
+2. Or create relationships after
+
+## Link Dependencies
+
+If app depends on other apps:
+- Use depends_on_apps field
+- Or create depends_on_app relationships
+
+## Apply Patterns
+
+Suggest patterns with spec_suggest_patterns
+Apply relevant ones with spec_apply_pattern
+
+## Example Configurations
+`
+
+	if appType == "frontend" || appType == "" {
+		guide += `
+### Frontend App Example
+
+{
+  "name": "web-frontend",
+  "app_type": "frontend",
+  "platform": ["web"],
+  "root_path": "apps/web",
+  "tech_stack": ["react", "typescript", "vite"],
+  "entry_point": "src/main.tsx",
+  "port": 3000,
+  "instructions": "npm install && npm run dev",
+  "deployment_target": "vercel",
+  "consumed_model_ids": ["user-id", "org-id"],
+  "depends_on_apps": ["auth-service-id", "api-gateway-id"]
+}
+`
+	}
+
+	if appType == "backend" || appType == "" {
+		guide += `
+### Backend Service Example
+
+{
+  "name": "auth-service",
+  "app_type": "backend",
+  "platform": ["go"],
+  "root_path": "services/auth",
+  "tech_stack": ["go", "grpc", "postgresql"],
+  "entry_point": "cmd/server/main.go",
+  "port": 8080,
+  "instructions": "go run cmd/server/main.go",
+  "deployment_target": "kubernetes",
+  "dependencies": ["grpc", "postgresql"]
+}
+`
+	}
+
+	if appType == "mobile" || appType == "" {
+		guide += `
+### Mobile App Example
+
+{
+  "name": "mobile-app",
+  "app_type": "mobile",
+  "platform": ["ios", "android"],
+  "root_path": "apps/mobile",
+  "tech_stack": ["react-native", "typescript"],
+  "entry_point": "index.js",
+  "instructions": "npm install && npm run ios",
+  "deployment_target": "app-store"
+}
+`
+	}
+
+	guide += `
+## Next Steps
+
+After creating the app:
+1. Create any data models it provides
+2. Link to data models it consumes
+3. Define app dependencies
+4. Create contexts/components/actions that belong to it
+5. Apply relevant patterns
+
+Use spec_get_app to verify configuration.
+`
+
+	return guide
+}

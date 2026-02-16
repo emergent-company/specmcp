@@ -4,10 +4,11 @@ import "time"
 
 // Entity type constants match the template pack definitions.
 const (
-	TypeActor        = "Actor"
-	TypeCodingAgent  = "CodingAgent"
-	TypePattern      = "Pattern"
-	TypeConstitution = "Constitution"
+	// Structural entities
+	TypeApp       = "App"
+	TypeDataModel = "DataModel"
+
+	// Workflow entities
 	TypeChange       = "Change"
 	TypeProposal     = "Proposal"
 	TypeSpec         = "Spec"
@@ -16,54 +17,75 @@ const (
 	TypeScenarioStep = "ScenarioStep"
 	TypeDesign       = "Design"
 	TypeTask         = "Task"
-	TypeTestCase     = "TestCase"
-	TypeAPIContract  = "APIContract"
-	TypeContext      = "Context"
-	TypeUIComponent  = "UIComponent"
-	TypeAction       = "Action"
-	TypeDataModel    = "DataModel"
-	TypeService      = "Service"
+
+	// Implementation entities
+	TypeContext     = "Context"
+	TypeUIComponent = "UIComponent"
+	TypeAction      = "Action"
+	TypeAPIContract = "APIContract"
+	TypeTestCase    = "TestCase"
+
+	// Supporting entities
+	TypeActor        = "Actor"
+	TypeCodingAgent  = "CodingAgent"
+	TypePattern      = "Pattern"
+	TypeConstitution = "Constitution"
 	TypeGraphSync    = "GraphSync"
 )
 
 // Relationship type constants.
 const (
-	RelInheritsFrom       = "inherits_from"
-	RelUsesPattern        = "uses_pattern"
-	RelExtendsPattern     = "extends_pattern"
-	RelHasProposal        = "has_proposal"
-	RelHasSpec            = "has_spec"
-	RelHasDesign          = "has_design"
-	RelHasTask            = "has_task"
-	RelHasRequirement     = "has_requirement"
-	RelHasScenario        = "has_scenario"
-	RelExecutedBy         = "executed_by"
-	RelHasStep            = "has_step"
-	RelVariantOf          = "variant_of"
-	RelOccursIn           = "occurs_in"
-	RelPerforms           = "performs"
-	RelComposedOf         = "composed_of"
-	RelUsesComponent      = "uses_component"
-	RelNestedIn           = "nested_in"
-	RelAvailableIn        = "available_in"
-	RelNavigatesTo        = "navigates_to"
-	RelHasSubtask         = "has_subtask"
-	RelBlocks             = "blocks"
-	RelBlockedBy          = "blocked_by"
-	RelImplements         = "implements"
-	RelAssignedTo         = "assigned_to"
-	RelGovernedBy         = "governed_by"
-	RelRequiresPattern    = "requires_pattern"
-	RelForbidsPattern     = "forbids_pattern"
-	RelTestedBy           = "tested_by"
-	RelTests              = "tests"
-	RelHasContract        = "has_contract"
-	RelImplementsContract = "implements_contract"
-	RelOwnedBy            = "owned_by"
-	RelExposesAPI         = "exposes_api"
-	RelBelongsToService   = "belongs_to_service"
-	RelUsesModel          = "uses_model"
-	RelProvidesModel      = "provides_model"
+	// Workflow relationships
+	RelHasProposal    = "has_proposal"
+	RelHasSpec        = "has_spec"
+	RelHasDesign      = "has_design"
+	RelHasTask        = "has_task"
+	RelHasRequirement = "has_requirement"
+	RelHasScenario    = "has_scenario"
+	RelHasStep        = "has_step"
+	RelHasSubtask     = "has_subtask"
+
+	// App and structure relationships
+	RelBelongsToApp  = "belongs_to_app" // Context, UIComponent, Action, APIContract → App
+	RelScopedToApp   = "scoped_to_app"  // Change, Spec, Requirement, Design, Task → App
+	RelDependsOnApp  = "depends_on_app" // App → App (runtime dependencies)
+	RelProvidesModel = "provides_model" // App → DataModel (owns/defines)
+	RelConsumesModel = "consumes_model" // App → DataModel (uses external)
+	RelExposesAPI    = "exposes_api"    // App → APIContract
+
+	// Pattern relationships
+	RelUsesPattern     = "uses_pattern"     // App, Context, UIComponent, Action, ScenarioStep → Pattern
+	RelExtendsPattern  = "extends_pattern"  // Pattern → Pattern
+	RelRequiresPattern = "requires_pattern" // Constitution → Pattern
+	RelForbidsPattern  = "forbids_pattern"  // Constitution → Pattern
+
+	// UI/Context relationships
+	RelComposedOf    = "composed_of"    // UIComponent → UIComponent
+	RelUsesComponent = "uses_component" // Context → UIComponent
+	RelNestedIn      = "nested_in"      // Context → Context
+	RelOccursIn      = "occurs_in"      // ScenarioStep → Context
+	RelPerforms      = "performs"       // ScenarioStep → Action
+	RelAvailableIn   = "available_in"   // Action → Context
+	RelNavigatesTo   = "navigates_to"   // Action → Context
+
+	// Contract and testing relationships
+	RelHasContract        = "has_contract"        // Spec → APIContract
+	RelImplementsContract = "implements_contract" // Action → APIContract
+	RelTestedBy           = "tested_by"           // Scenario → TestCase
+	RelTests              = "tests"               // TestCase → Scenario
+
+	// Actor and agent relationships
+	RelInheritsFrom = "inherits_from" // Actor → Actor
+	RelExecutedBy   = "executed_by"   // Scenario → Actor
+	RelAssignedTo   = "assigned_to"   // Task → CodingAgent
+	RelOwnedBy      = "owned_by"      // Entity → CodingAgent
+	RelGovernedBy   = "governed_by"   // Change → Constitution
+
+	// Task and scenario relationships
+	RelVariantOf  = "variant_of" // Scenario → Scenario
+	RelBlocks     = "blocks"     // Task → Task
+	RelBlockedBy  = "blocked_by" // Task → Task (inverse)
+	RelImplements = "implements" // Task → Spec/Context/UIComponent/Action/Pattern
 
 	// Change-scoped entity tracking: version-aware relationships from Changes
 	// to shared entities, recording exactly what state the Change was designed against.
@@ -323,15 +345,22 @@ type DataModel struct {
 	Tags        []string `json:"tags,omitempty"`
 }
 
-// Service represents a backend subsystem or package.
-type Service struct {
-	ID          string   `json:"id,omitempty"`
-	Name        string   `json:"name"`
-	DisplayName string   `json:"display_name,omitempty"`
-	Description string   `json:"description,omitempty"`
-	PackagePath string   `json:"package_path,omitempty"` // e.g. "server/internal/mcpproxy"
-	Visibility  string   `json:"visibility,omitempty"`   // "internal" or "public"
-	Tags        []string `json:"tags,omitempty"`
+// App represents a deployable application in the monorepo.
+type App struct {
+	ID               string   `json:"id,omitempty"`
+	Name             string   `json:"name"`
+	DisplayName      string   `json:"display_name,omitempty"`
+	AppType          string   `json:"app_type"`            // frontend, backend, desktop, mobile, cli, library
+	Platform         []string `json:"platform,omitempty"`  // e.g. ["web"], ["ios", "android"], ["macos", "windows", "linux"]
+	RootPath         string   `json:"root_path,omitempty"` // e.g. "apps/web", "services/auth"
+	Description      string   `json:"description,omitempty"`
+	TechStack        []string `json:"tech_stack,omitempty"`        // e.g. ["react", "typescript", "vite"]
+	Instructions     string   `json:"instructions,omitempty"`      // setup, build, run, test, deployment instructions
+	DeploymentTarget string   `json:"deployment_target,omitempty"` // e.g. "vercel", "kubernetes", "app-store"
+	EntryPoint       string   `json:"entry_point,omitempty"`       // e.g. "src/main.tsx", "cmd/server/main.go"
+	Port             int      `json:"port,omitempty"`              // default local development port
+	Dependencies     []string `json:"dependencies,omitempty"`      // key external dependencies
+	Tags             []string `json:"tags,omitempty"`
 }
 
 // GraphSync tracks synchronization state.
