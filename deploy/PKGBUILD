@@ -1,6 +1,6 @@
 # Maintainer: Emergent <dev@emergent.sh>
 pkgname=specmcp
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='Spec-driven development MCP server backed by the Emergent knowledge graph'
 arch=('x86_64')
