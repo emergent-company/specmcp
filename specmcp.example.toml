@@ -51,3 +51,20 @@
 # Log level: debug, info, warn, error.
 # Env: SPECMCP_LOG_LEVEL
 # level = "info"
+
+# ── Janitor ──────────────────────────────────────────────────────────
+
+[janitor]
+# Enable scheduled janitor runs (stdio mode only).
+# The janitor verifies artifact compliance and project health.
+# Env: SPECMCP_JANITOR_ENABLED
+# enabled = false
+
+# How often to run the janitor (in hours).
+# Env: SPECMCP_JANITOR_INTERVAL_HOURS
+# interval_hours = 1
+
+# Automatically create maintenance proposals for critical issues.
+# When false, the janitor only logs issues.
+# Env: SPECMCP_JANITOR_CREATE_PROPOSAL
+# create_proposal = false

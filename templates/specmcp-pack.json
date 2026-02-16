@@ -375,8 +375,8 @@
         },
         "task_type": {
           "type": "string",
-          "enum": ["spec", "context", "component", "action", "pattern"],
-          "description": "What kind of entity this task implements"
+          "enum": ["implementation", "testing", "documentation", "refactoring", "investigation", "maintenance"],
+          "description": "What kind of work this task represents"
         },
         "status": {
           "type": "string",
@@ -775,6 +775,59 @@
           "description": "Namespaced tags"
         }
       }
+    },
+    "MaintenanceIssue": {
+      "type": "object",
+      "description": "A data integrity or compliance problem detected by the janitor agent. Unlike feature Changes, these are reactive maintenance items that restore graph health.",
+      "required": ["title", "description", "severity", "status"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short summary of the issue (e.g. 'Orphaned Spec Entities Detected')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed explanation of the problem and its scope"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "warning", "info"],
+          "description": "Issue severity: critical (blocks workflow), warning (should fix), info (nice to have)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["data_integrity", "compliance", "structural", "stale_entities"],
+          "description": "Issue category for grouping and filtering"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "approved", "in_progress", "resolved", "dismissed"],
+          "description": "Issue lifecycle: proposed → approved (user says 'go for it') → in_progress → resolved/dismissed"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the janitor detected this issue"
+        },
+        "detected_by": {
+          "type": "string",
+          "description": "Who/what detected the issue (typically 'janitor-agent')"
+        },
+        "janitor_run_id": {
+          "type": "string",
+          "description": "ID linking back to the janitor execution that found this"
+        },
+        "affected_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of entities affected by this issue"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Namespaced tags (e.g. 'auto-detected', 'orphaned', 'quick-fix')"
+        }
+      }
     }
   },
   "relationship_type_schemas": {
@@ -1007,6 +1060,30 @@
       "sourceTypes": ["App"],
       "targetTypes": ["APIContract"],
       "cardinality": "one-to-many"
+    },
+    "affects_entity": {
+      "description": "MaintenanceIssue affects a specific entity that needs fixing",
+      "sourceTypes": ["MaintenanceIssue"],
+      "targetTypes": ["Change", "Proposal", "Spec", "Requirement", "Scenario", "Design", "Task", "Context", "UIComponent", "Action", "Pattern"],
+      "cardinality": "many-to-many"
+    },
+    "parent_issue": {
+      "description": "MaintenanceIssue is part of a larger parent issue (for grouping related problems)",
+      "sourceTypes": ["MaintenanceIssue"],
+      "targetTypes": ["MaintenanceIssue"],
+      "cardinality": "many-to-one"
+    },
+    "resolved_by_change": {
+      "description": "MaintenanceIssue was resolved by implementing a Change (if code changes were needed)",
+      "sourceTypes": ["MaintenanceIssue"],
+      "targetTypes": ["Change"],
+      "cardinality": "many-to-one"
+    },
+    "proposed_by": {
+      "description": "MaintenanceIssue was proposed/detected by a coding agent (typically janitor-agent)",
+      "sourceTypes": ["MaintenanceIssue"],
+      "targetTypes": ["CodingAgent"],
+      "cardinality": "many-to-one"
     }
   },
   "ui_configs": {},

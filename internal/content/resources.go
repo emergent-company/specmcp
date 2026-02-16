@@ -81,6 +81,59 @@ func (r *ToolReferenceResource) Read() (*mcp.ResourcesReadResult, error) {
 	}, nil
 }
 
+// --- specmcp://guide resource ---
+
+// GuideResource is the primary LLM-facing reference that explains the SpecMCP
+// concept, workflow, guardrails, and how to use the tools.
+type GuideResource struct{}
+
+func (r *GuideResource) Definition() mcp.ResourceDefinition {
+	return mcp.ResourceDefinition{
+		URI:         "specmcp://guide",
+		Name:        "SpecMCP Guide",
+		Description: "Comprehensive reference for SpecMCP: concept, workflow, guardrails, apps, and tool usage",
+		MimeType:    "text/markdown",
+	}
+}
+
+func (r *GuideResource) Read() (*mcp.ResourcesReadResult, error) {
+	return &mcp.ResourcesReadResult{
+		Contents: []mcp.ResourceContent{
+			{
+				URI:      "specmcp://guide",
+				MimeType: "text/markdown",
+				Text:     guideContent,
+			},
+		},
+	}, nil
+}
+
+// --- specmcp://workflow resource ---
+
+// WorkflowResource is a reference guide for the artifact workflow sequence.
+type WorkflowResource struct{}
+
+func (r *WorkflowResource) Definition() mcp.ResourceDefinition {
+	return mcp.ResourceDefinition{
+		URI:         "specmcp://workflow",
+		Name:        "SpecMCP Workflow Reference",
+		Description: "Reference guide for the SpecMCP artifact workflow (Proposal → Specs → Design → Tasks)",
+		MimeType:    "text/markdown",
+	}
+}
+
+func (r *WorkflowResource) Read() (*mcp.ResourcesReadResult, error) {
+	return &mcp.ResourcesReadResult{
+		Contents: []mcp.ResourceContent{
+			{
+				URI:      "specmcp://workflow",
+				MimeType: "text/markdown",
+				Text:     workflowContent,
+			},
+		},
+	}, nil
+}
+
 // --- Static content ---
 
 const entityModelContent = `# SpecMCP Entity Model
@@ -334,6 +387,251 @@ Guards receive a populated GuardContext containing:
 
 The context is populated once via graph queries, then shared across all guards to avoid N+1 query patterns.
 `
+
+// --- Guide content ---
+
+const guideContent = `# SpecMCP — Spec-Driven Development via MCP
+
+## What is SpecMCP?
+
+SpecMCP is a Model Context Protocol (MCP) server that provides **spec-driven development workflow** backed by a knowledge graph. Instead of managing specifications as scattered files, SpecMCP stores all artifacts — proposals, specs, requirements, scenarios, designs, tasks, patterns, and constitutions — as graph entities with typed relationships.
+
+This enables:
+- **Traceability**: Every requirement traces to scenarios, design decisions, and tasks
+- **Impact analysis**: Understand what's affected when something changes
+- **Dependency management**: Tasks with explicit blocking relationships and critical path analysis
+- **Pattern enforcement**: Reusable patterns with automatic detection and compliance checking
+- **Guardrails**: Automated checks at every stage to prevent workflow mistakes
+- **Monorepo support**: First-class support for multiple apps with shared data models
+
+## Core Concept: Artifact Workflow
+
+Every change follows a structured progression:
+
+` + "```" + `
+Proposal (Why) → Specs (What) → Design (How) → Tasks (Steps)
+` + "```" + `
+
+Each stage builds on the previous one, enforced by guardrails:
+- You cannot add specs without a **ready** proposal
+- You cannot add a design without a **ready** proposal and all specs **ready**
+- You cannot add tasks without a **ready** design
+
+## Entity Model
+
+SpecMCP uses 18 entity types and 30+ relationship types. Key entities:
+
+| Entity | Purpose |
+|--------|---------|
+| **Change** | Top-level container for a feature, fix, or refactoring |
+| **Proposal** | Intent — why the change exists |
+| **Spec** | Domain-specific specification container |
+| **Requirement** | Specific behavior the system must have |
+| **Scenario** | BDD-style example (Given/When/Then) |
+| **Design** | Technical approach — how specs will be implemented |
+| **Task** | Implementable step with complexity, status, blocking |
+| **Pattern** | Reusable implementation convention |
+| **Constitution** | Project-wide principles and guardrails |
+| **App** | Deployable application in your monorepo |
+| **DataModel** | Shared data structure across apps |
+| **Actor** | User role or persona |
+| **Context** | Screen, page, or interaction surface |
+| **UIComponent** | Reusable UI component |
+| **Action** | User action or system operation |
+| **TestCase** | Executable test linked to a scenario |
+| **APIContract** | Machine-readable API definition |
+| **CodingAgent** | Developer or AI agent |
+
+## Monorepo Support
+
+SpecMCP fully supports monorepo architectures with Apps and DataModels:
+
+### App Entity
+Represents a deployable application (frontend, backend, mobile, desktop, cli, library).
+
+**Key fields**: name, app_type, platform, root_path, tech_stack, instructions, deployment_target, entry_point, port
+
+**Relationships**:
+- belongs_to_app (from Context/UIComponent/Action/APIContract)
+- scoped_to_app (from Change/Spec/Design/Task)
+- depends_on_app (app dependencies)
+- provides_model/consumes_model (data model relationships)
+
+### DataModel Entity
+Represents shared data structures across apps.
+
+**Key fields**: name, platform, file_path, fields, persistence, go_type, ts_type, swift_type
+
+**Relationships**:
+- provides_model (App → DataModel)
+- consumes_model (App → DataModel)
+
+### Cross-App Changes
+Use ` + "`scoped_to_apps`" + ` field on Changes, Specs, Designs, and Tasks to indicate which apps are affected.
+
+## Guardrails
+
+SpecMCP enforces guardrails at three points:
+
+### Pre-Change Guards (spec_new)
+| Guard | Severity | What it checks |
+|-------|----------|----------------|
+| kebab_case_name | HARD_BLOCK | Change name must be kebab-case |
+| constitution_required | HARD_BLOCK | Project should have a constitution |
+| patterns_seeded | SOFT_BLOCK | Project should have patterns |
+| context_discovery | SUGGESTION | Contexts should be mapped |
+| component_discovery | SUGGESTION | Components should be mapped |
+
+### Artifact Guards (spec_artifact)
+| Guard | Severity | What it checks |
+|-------|----------|----------------|
+| proposal_before_spec | HARD_BLOCK | Proposal required before specs |
+| spec_before_design | HARD_BLOCK | Specs required before design |
+| design_before_tasks | HARD_BLOCK | Design required before tasks |
+
+### Archive Guards (spec_archive)
+| Guard | Severity | What it checks |
+|-------|----------|----------------|
+| artifact_completeness | SOFT_BLOCK | All core artifacts should exist |
+| task_completion | SOFT_BLOCK | All tasks should be completed |
+
+**Severity levels**:
+- **HARD_BLOCK**: Cannot proceed. Fix the issue first.
+- **SOFT_BLOCK**: Should not proceed. Use force=true to override.
+- **WARNING**: Advisory — action recommended but not required.
+- **SUGGESTION**: Informational tip.
+
+## Tools Reference
+
+### Workflow (7 tools)
+- **spec_new** — Create a new change container
+- **spec_artifact** — Add any artifact type to a change (18 types supported)
+- **spec_batch_artifact** — Add multiple artifacts in one call
+- **spec_archive** — Archive a completed change
+- **spec_verify** — Verify completeness, correctness, and coherence
+- **spec_mark_ready** — Mark a workflow artifact as ready (with cascading validation)
+- **spec_status** — Get readiness status and next steps for a change
+
+### Query (11 tools)
+- **spec_list_changes** — List all changes (filter by status)
+- **spec_get_change** — Get full change details with artifacts
+- **spec_get_app** — Get an app with all relationships
+- **spec_get_data_model** — Get a data model with provider/consumers
+- **spec_get_context** — Get a context entity with relationships
+- **spec_get_component** — Get a UI component with relationships
+- **spec_get_action** — Get an action entity with relationships
+- **spec_get_scenario** — Get a scenario with steps
+- **spec_get_patterns** — Get all patterns (filter by type)
+- **spec_impact_analysis** — Analyze what's affected by a change
+- **spec_search** — Search across all entity types
+
+### Task Management (5 tools)
+- **spec_generate_tasks** — Auto-generate tasks from a design
+- **spec_get_available_tasks** — Get tasks ready for work (dependencies met)
+- **spec_assign_task** — Assign a task to an agent
+- **spec_complete_task** — Mark a task as done with verification
+- **spec_get_critical_path** — Find the longest dependency chain
+
+### Patterns (3 tools)
+- **spec_suggest_patterns** — Suggest applicable patterns for a change
+- **spec_apply_pattern** — Link a pattern to a change
+- **spec_seed_patterns** — Seed 15 built-in patterns
+
+### Constitution (2 tools)
+- **spec_create_constitution** — Create or update the project constitution
+- **spec_validate_constitution** — Check change compliance against constitution
+
+### Sync (3 tools)
+- **spec_sync_status** — Check graph sync state
+- **spec_sync** — Synchronize graph with codebase
+- **spec_graph_summary** — Get entity/relationship counts
+
+### Janitor (1 tool)
+- **spec_janitor_run** — Run compliance verification and maintenance
+
+## Recommended Workflow
+
+1. **Bootstrap** (once per project):
+   - Seed patterns: ` + "`spec_seed_patterns`" + `
+   - Create constitution: ` + "`spec_create_constitution`" + `
+
+2. **Map your monorepo**:
+   - Create App entities for each deployable app
+   - Create DataModel entities for shared data structures
+   - Link apps to models (provides_model/consumes_model)
+
+3. **Start a change**:
+   - ` + "`spec_new`" + ` with a kebab-case name
+   - Always identify which apps are affected
+
+4. **Define the change** (follow the artifact workflow):
+   - Proposal → mark ready → Specs → Requirements → Scenarios → mark ready (bottom-up) → Design → mark ready → Tasks
+   - Use ` + "`spec_status`" + ` to check readiness and see next steps at any stage
+
+5. **Implement**:
+   - Work through tasks in dependency order using task management tools
+
+6. **Verify and archive**:
+   - ` + "`spec_verify`" + ` to check completeness
+   - ` + "`spec_archive`" + ` to finalize
+`
+
+// --- Workflow content ---
+
+const workflowContent = `# SpecMCP Artifact Workflow Reference
+
+Every change follows a structured artifact progression, each stage building on the previous:
+
+## Readiness Gating
+
+Workflow progression is gated on **readiness**, not just existence. Each workflow artifact (Proposal, Spec, Requirement, Scenario, Design) has a status of **draft** or **ready**.
+
+- New artifacts start as **draft**
+- Use ` + "`spec_mark_ready`" + ` to mark an artifact as **ready**
+- Readiness cascades: a Spec can't be ready unless all its Requirements are ready; a Requirement can't be ready unless all its Scenarios are ready
+- Adding a child to a ready parent (e.g., a new Requirement to a ready Spec) automatically reverts the parent to **draft**
+- Use ` + "`spec_status`" + ` to see overall readiness and next steps
+
+## Proposal (Why)
+Captures the **intent** — why this change needs to happen.
+- Fields: intent (required), scope, impact
+- Created via: spec_artifact with artifact_type="proposal"
+- Must be marked **ready** before adding specs
+
+## Specs (What)
+Define **what** the change does. Each spec is a domain-specific container.
+- Fields: name, domain, purpose, delta_type, scoped_to_apps
+- Contains: Requirements (MUST/SHOULD/MAY)
+- Requirements contain: Scenarios (Given/When/Then BDD format)
+- Mark ready **bottom-up**: Scenarios → Requirements → Specs
+
+## Design (How)
+Describes **how** specs will be implemented.
+- Fields: approach, decisions, data_flow, file_changes, scoped_to_apps
+- Should reference applicable patterns
+- Must be marked **ready** before adding tasks
+
+## Tasks (Steps)
+Break the design into concrete, implementable steps.
+- Fields: number, description, task_type, complexity_points (1-10), scoped_to_apps
+- Relationships: blocks/blocked_by (auto-bidirectional), has_subtask, assigned_to
+- Auto-generation available via spec_generate_tasks
+
+## Apps & Data Models
+When changes affect apps or introduce data models:
+- Create App entities (artifact_type="app") for new apps
+- Create DataModel entities (artifact_type="data_model") for new data structures
+- Link apps to models (provides_model/consumes_model relationships)
+- Use scoped_to_apps field on workflow artifacts
+
+## Enforcement
+The workflow order is enforced by readiness-based guardrails:
+- Specs require a **ready** Proposal (hard block)
+- Design requires **ready** Proposal + all Specs **ready** (hard block)
+- Tasks require a **ready** Design (hard block)
+`
+
+// --- Tool reference content ---
 
 const toolReferenceContent = `# SpecMCP Tool Quick Reference
 

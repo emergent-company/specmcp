@@ -41,7 +41,9 @@ import (
 	"github.com/emergent-company/specmcp/internal/content"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
+	"github.com/emergent-company/specmcp/internal/scheduler"
 	"github.com/emergent-company/specmcp/internal/tools/constitution"
+	"github.com/emergent-company/specmcp/internal/tools/janitor"
 	"github.com/emergent-company/specmcp/internal/tools/patterns"
 	"github.com/emergent-company/specmcp/internal/tools/query"
 	gosync "github.com/emergent-company/specmcp/internal/tools/sync"
@@ -150,13 +152,17 @@ func run() error {
 	registry.Register(gosync.NewSync(emFactory))
 	registry.Register(gosync.NewGraphSummary(emFactory))
 
-	// Register prompts
-	registry.RegisterPrompt(&content.GuidePrompt{})
-	registry.RegisterPrompt(&content.WorkflowPrompt{})
+	// Register janitor tool
+	registry.Register(janitor.NewJanitorRun(emFactory, logger))
+
+	// Register prompts (actionable - gather info or kick off workflows)
+	registry.RegisterPrompt(&content.CreateConstitutionPrompt{})
 	registry.RegisterPrompt(&content.StartChangePrompt{})
 	registry.RegisterPrompt(&content.SetupAppPrompt{})
 
-	// Register resources
+	// Register resources (reference material)
+	registry.RegisterResource(&content.GuideResource{})
+	registry.RegisterResource(&content.WorkflowResource{})
 	registry.RegisterResource(&content.EntityModelResource{})
 	registry.RegisterResource(&content.GuardrailsResource{})
 	registry.RegisterResource(&content.ToolReferenceResource{})
@@ -166,6 +172,18 @@ func run() error {
 		Name:    cfg.Server.Name,
 		Version: version,
 	}, logger)
+
+	// Start scheduler if enabled (for stdio mode only - HTTP mode doesn't support background jobs)
+	var sched *scheduler.Scheduler
+	if cfg.Janitor.Enabled && cfg.Transport.Mode == "stdio" {
+		sched = scheduler.NewScheduler(logger)
+		janitorJob := janitor.NewJanitorJob(emFactory, logger, cfg.Emergent.Token)
+		interval := time.Duration(cfg.Janitor.IntervalHours) * time.Hour
+		sched.AddJob(janitorJob, interval)
+		sched.Start(ctx)
+		defer sched.Stop()
+		logger.Info("janitor scheduler enabled", "interval_hours", cfg.Janitor.IntervalHours)
+	}
 
 	// Select transport
 	switch cfg.Transport.Mode {

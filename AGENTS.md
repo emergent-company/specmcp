@@ -40,6 +40,8 @@ internal/
     patterns/                 # suggest_patterns, apply_pattern, seed_patterns
     constitution/             # create_constitution, validate_constitution
     sync/                     # sync_status, sync, graph_summary
+    janitor/                  # janitor_run - compliance verification and maintenance
+  scheduler/                  # Background job scheduler for periodic tasks
   content/
     prompts.go                # GuidePrompt, WorkflowPrompt
     resources.go              # EntityModel, Guardrails, ToolReference resources
@@ -133,6 +135,57 @@ Environment variables always override config file values.
 | `SPECMCP_HOST` | No | `0.0.0.0` | HTTP listen address (http mode only) |
 | `SPECMCP_CORS_ORIGINS` | No | `*` | Comma-separated CORS origins (http mode only) |
 | `SPECMCP_LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
+| `SPECMCP_JANITOR_ENABLED` | No | `false` | Enable scheduled janitor runs (stdio mode only) |
+| `SPECMCP_JANITOR_INTERVAL_HOURS` | No | `1` | How often to run janitor (in hours) |
+| `SPECMCP_JANITOR_CREATE_PROPOSAL` | No | `false` | Auto-create maintenance proposals for critical issues |
+
+## Janitor Agent
+
+The janitor agent maintains project health by verifying artifact compliance and identifying issues. It can be run on-demand via the `spec_janitor_run` tool or scheduled to run automatically at regular intervals.
+
+### Features
+
+- **Artifact Verification**: Checks naming conventions (kebab-case), readiness cascades, and completeness
+- **Relationship Validation**: Ensures specs have requirements, requirements have scenarios, etc.
+- **Orphan Detection**: Identifies artifacts not connected to any Change
+- **Stale Change Detection**: Flags changes in draft/proposed state for over 30 days
+- **Automatic Proposals**: Can create maintenance proposals for critical issues
+
+### Running On-Demand
+
+Use the `spec_janitor_run` tool via any MCP client:
+
+```json
+{
+  "scope": "all",              // "all", "changes", "artifacts", "relationships"
+  "create_proposal": true,     // Create a proposal if critical issues found
+  "auto_fix": false            // Automatically fix minor issues (future)
+}
+```
+
+### Scheduled Runs
+
+Enable automatic hourly runs in stdio mode by setting configuration:
+
+**Environment variables:**
+```bash
+SPECMCP_JANITOR_ENABLED=true
+SPECMCP_JANITOR_INTERVAL_HOURS=1
+SPECMCP_JANITOR_CREATE_PROPOSAL=false
+```
+
+**Or in `specmcp.toml`:**
+```toml
+[janitor]
+enabled = true
+interval_hours = 1
+create_proposal = false
+```
+
+Scheduled runs check everything but don't auto-create proposals by default (only log findings). This prevents noise while still providing visibility into project health.
+
+**Note**: Scheduled janitor runs are only supported in stdio mode. HTTP mode is stateless and doesn't support background tasks.
+
 
 ## HTTP Transport Details
 

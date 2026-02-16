@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	sdk "github.com/emergent-company/emergent/apps/server-go/pkg/sdk"
@@ -73,12 +74,16 @@ func (f *ClientFactory) ClientFor(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("no emergent token in request context")
 	}
 
+	// Check for project ID in environment for standalone API keys
+	projectID := os.Getenv("EMERGENT_PROJECT_ID")
+
 	sdkClient, err := sdk.New(sdk.Config{
 		ServerURL: f.serverURL,
 		Auth: sdk.AuthConfig{
 			Mode:   "apikey",
 			APIKey: token,
 		},
+		ProjectID:  projectID,
 		HTTPClient: f.httpClient,
 	})
 	if err != nil {
@@ -95,12 +100,16 @@ func (f *ClientFactory) ClientFor(ctx context.Context) (*Client, error) {
 // (like the seed script) that operate with a single known token rather than
 // per-request tokens from HTTP headers.
 func NewClient(serverURL, token string, logger *slog.Logger) (*Client, error) {
+	// Check for project ID in environment for standalone API keys
+	projectID := os.Getenv("EMERGENT_PROJECT_ID")
+
 	sdkClient, err := sdk.New(sdk.Config{
 		ServerURL: serverURL,
 		Auth: sdk.AuthConfig{
 			Mode:   "apikey",
 			APIKey: token,
 		},
+		ProjectID: projectID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating SDK client: %w", err)

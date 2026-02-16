@@ -14,6 +14,7 @@ type Config struct {
 	Server    ServerConfig    `toml:"server"`
 	Transport TransportConfig `toml:"transport"`
 	Log       LogConfig       `toml:"log"`
+	Janitor   JanitorConfig   `toml:"janitor"`
 }
 
 // EmergentConfig holds Emergent connection details.
@@ -46,6 +47,13 @@ type LogConfig struct {
 	Level string `toml:"level"` // debug, info, warn, error
 }
 
+// JanitorConfig holds janitor scheduling configuration.
+type JanitorConfig struct {
+	Enabled        bool `toml:"enabled"`         // Enable scheduled janitor runs
+	IntervalHours  int  `toml:"interval_hours"`  // How often to run (in hours)
+	CreateProposal bool `toml:"create_proposal"` // Auto-create proposals for critical issues
+}
+
 // Load creates a Config by reading from a TOML config file and environment
 // variables. Precedence: environment variables > config file > defaults.
 //
@@ -75,6 +83,11 @@ func Load(configPath string) (*Config, error) {
 		},
 		Log: LogConfig{
 			Level: "info",
+		},
+		Janitor: JanitorConfig{
+			Enabled:        false, // Disabled by default
+			IntervalHours:  1,     // Run every hour when enabled
+			CreateProposal: false, // Don't auto-create proposals by default
 		},
 	}
 
@@ -154,6 +167,20 @@ func (c *Config) applyEnv() {
 
 	// Logging
 	envOverride("SPECMCP_LOG_LEVEL", &c.Log.Level)
+
+	// Janitor
+	if v := os.Getenv("SPECMCP_JANITOR_ENABLED"); v != "" {
+		c.Janitor.Enabled = (v == "true" || v == "1")
+	}
+	if v := os.Getenv("SPECMCP_JANITOR_INTERVAL_HOURS"); v != "" {
+		var hours int
+		if _, err := fmt.Sscanf(v, "%d", &hours); err == nil && hours > 0 {
+			c.Janitor.IntervalHours = hours
+		}
+	}
+	if v := os.Getenv("SPECMCP_JANITOR_CREATE_PROPOSAL"); v != "" {
+		c.Janitor.CreateProposal = (v == "true" || v == "1")
+	}
 }
 
 // Validate checks that required fields are present.

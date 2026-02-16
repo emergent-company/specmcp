@@ -26,11 +26,12 @@ const (
 	TypeTestCase    = "TestCase"
 
 	// Supporting entities
-	TypeActor        = "Actor"
-	TypeCodingAgent  = "CodingAgent"
-	TypePattern      = "Pattern"
-	TypeConstitution = "Constitution"
-	TypeGraphSync    = "GraphSync"
+	TypeActor            = "Actor"
+	TypeCodingAgent      = "CodingAgent"
+	TypePattern          = "Pattern"
+	TypeConstitution     = "Constitution"
+	TypeGraphSync        = "GraphSync"
+	TypeMaintenanceIssue = "MaintenanceIssue"
 )
 
 // Relationship type constants.
@@ -92,6 +93,12 @@ const (
 	RelChangeCreates    = "change_creates"    // Change introduced this entity (points to version-specific ID)
 	RelChangeModifies   = "change_modifies"   // Change updated this entity (points to new version's ID)
 	RelChangeReferences = "change_references" // Change used this entity as-is (points to current version's ID)
+
+	// Maintenance relationships
+	RelAffectsEntity    = "affects_entity"     // MaintenanceIssue → Entity (links to entities with problems)
+	RelParentIssue      = "parent_issue"       // MaintenanceIssue → MaintenanceIssue (groups related issues)
+	RelResolvedByChange = "resolved_by_change" // MaintenanceIssue → Change (if fix requires code changes)
+	RelProposedBy       = "proposed_by"        // MaintenanceIssue → CodingAgent (janitor agent)
 )
 
 // Status constants for Change and Task entities.
@@ -370,4 +377,19 @@ type GraphSync struct {
 	LastSyncedAt     *time.Time `json:"last_synced_at,omitempty"`
 	Status           string     `json:"status"`
 	Tags             []string   `json:"tags,omitempty"`
+}
+
+// MaintenanceIssue represents a data integrity or compliance problem detected by the janitor.
+type MaintenanceIssue struct {
+	ID            string     `json:"id,omitempty"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	Severity      string     `json:"severity"` // critical, warning, info
+	Category      string     `json:"category"` // data_integrity, compliance, structural, stale_entities
+	Status        string     `json:"status"`   // proposed, approved, in_progress, resolved, dismissed
+	DetectedAt    *time.Time `json:"detected_at,omitempty"`
+	DetectedBy    string     `json:"detected_by,omitempty"` // typically "janitor-agent"
+	JanitorRunID  string     `json:"janitor_run_id,omitempty"`
+	AffectedCount int        `json:"affected_count,omitempty"`
+	Tags          []string   `json:"tags,omitempty"`
 }
