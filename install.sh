@@ -110,6 +110,22 @@ install_arch() {
     
     info "Arch Linux detected. Installing SpecMCP ${VERSION}..."
 
+    # Check if service is running before upgrade
+    SERVICE_WAS_RUNNING=0
+    if systemctl is-active --quiet specmcp 2>/dev/null; then
+        info "Stopping SpecMCP service..."
+        SERVICE_WAS_RUNNING=1
+        if command -v sudo > /dev/null 2>&1; then
+            sudo systemctl stop specmcp
+        else
+            if [ "$(id -u)" -eq 0 ]; then
+                systemctl stop specmcp
+            else
+                su -c "systemctl stop specmcp"
+            fi
+        fi
+    fi
+
     TMP_DIR=$(mktemp -d)
     trap "rm -rf ${TMP_DIR}" EXIT
     
@@ -137,16 +153,37 @@ install_arch() {
         fi
         success "SpecMCP installed successfully via Pacman!"
         
-        echo ""
-        info "Service installed at /usr/lib/systemd/system/specmcp.service"
-        info "Config installed at /etc/specmcp/config.toml"
-        echo ""
-        info "To enable and start the service:"
-        echo "  sudo systemctl enable --now specmcp"
-        echo ""
-        info "To check status:"
-        echo "  sudo systemctl status specmcp"
-        echo ""
+        # Restart service if it was running
+        if [ "$SERVICE_WAS_RUNNING" = "1" ]; then
+            info "Restarting SpecMCP service..."
+            sleep 1
+            if command -v sudo > /dev/null 2>&1; then
+                sudo systemctl start specmcp
+            else
+                if [ "$(id -u)" -eq 0 ]; then
+                    systemctl start specmcp
+                else
+                    su -c "systemctl start specmcp"
+                fi
+            fi
+            sleep 2
+            if systemctl is-active --quiet specmcp 2>/dev/null; then
+                success "Service restarted successfully"
+            else
+                warn "Service may have failed to start. Check: systemctl status specmcp"
+            fi
+        else
+            echo ""
+            info "Service installed at /usr/lib/systemd/system/specmcp.service"
+            info "Config installed at /etc/specmcp/config.toml"
+            echo ""
+            info "To enable and start the service:"
+            echo "  sudo systemctl enable --now specmcp"
+            echo ""
+            info "To check status:"
+            echo "  sudo systemctl status specmcp"
+            echo ""
+        fi
     else
         warn "Pre-built package not found (maybe release is still building?). Falling back to generic install."
         install_generic

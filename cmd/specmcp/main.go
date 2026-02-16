@@ -75,6 +75,9 @@ func run() error {
 		case "upgrade":
 			handleUpgradeCommand(os.Args[2:])
 			return nil
+		case "rollback":
+			handleRollbackCommand()
+			return nil
 		}
 	}
 
