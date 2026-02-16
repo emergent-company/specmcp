@@ -93,15 +93,23 @@ jobs:
       - name: Get version
         id: version
         run: |
+          # Configure git to trust this directory
+          git config --global --add safe.directory '*'
+          # Ensure we have all tags
+          git fetch --tags --force
           VERSION=$(git describe --tags --always 2>/dev/null || echo "0.1.0")
           CLEAN_VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION (clean: $CLEAN_VERSION)"
+          echo "All tags:"
+          git tag -l | sort -V | tail -5
 
       - name: Update PKGBUILD version
         run: |
           sed -i "s/^pkgver=.*/pkgver=${{ steps.version.outputs.clean_version }}/" pkg/arch/PKGBUILD
+          echo "Updated PKGBUILD pkgver:"
+          grep "^pkgver=" pkg/arch/PKGBUILD
 
       - name: Build package
         run: |
@@ -115,6 +123,8 @@ jobs:
           
           # Move package to dist
           mkdir -p ../../dist
+          echo "Packages created:"
+          ls -la *.pkg.tar.zst || echo "No package created"
           mv *.pkg.tar.zst ../../dist/ || echo "No package created"
 
       - name: Upload Arch package
