@@ -64,9 +64,9 @@ tasks:
       - rm -rf {{.OUTDIR}}
 
   docker:
-    desc: Build Docker image
+    desc: Build Docker image with BuildKit caching
     cmds:
-      - docker build -t specmcp .
+      - DOCKER_BUILDKIT=1 docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t specmcp .
 
   build-all:
     desc: Build for all platforms (release)
