@@ -60,6 +60,12 @@ func main() {
 }
 
 func run() error {
+	// Handle subcommands before flag parsing.
+	if len(os.Args) > 1 && os.Args[1] == "info" {
+		runInfo(os.Args[2:])
+		return nil
+	}
+
 	// Parse flags
 	configPath := flag.String("config", "", "path to specmcp.toml config file")
 	flag.Parse()
