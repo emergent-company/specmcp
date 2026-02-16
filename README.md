@@ -20,7 +20,54 @@ SpecMCP provides a spec-anchored development workflow where specifications evolv
 
 ## Installation
 
-### From source
+### Quick Install (Recommended)
+
+Install or upgrade to the latest version with one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emergent-company/specmcp/main/install.sh | sh
+```
+
+This will:
+- On **Arch Linux**: Install the official package via pacman with systemd service
+- On **macOS/Other Linux**: Install to `~/.specmcp/bin` and add to PATH
+
+### Manual Installation
+
+#### Arch Linux
+
+Install the official package from GitHub releases:
+
+```bash
+# Download and install with pacman
+wget https://github.com/emergent-company/specmcp/releases/latest/download/specmcp-*-x86_64.pkg.tar.zst
+sudo pacman -U specmcp-*-x86_64.pkg.tar.zst
+
+# Enable and start the service (optional)
+sudo systemctl enable --now specmcp
+```
+
+The package includes:
+- Binary: `/usr/bin/specmcp`
+- Config: `/etc/specmcp/config.toml`
+- Service: `/usr/lib/systemd/system/specmcp.service`
+
+#### macOS / Linux (Generic)
+
+Download the appropriate binary for your platform:
+
+```bash
+# Detect platform and download
+PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+PLATFORM="${PLATFORM//x86_64/amd64}"
+PLATFORM="${PLATFORM//aarch64/arm64}"
+
+wget https://github.com/emergent-company/specmcp/releases/latest/download/specmcp-${PLATFORM}.tar.gz
+tar -xzf specmcp-${PLATFORM}.tar.gz
+sudo mv specmcp /usr/local/bin/
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/emergent-company/specmcp.git
@@ -30,10 +77,24 @@ task build
 
 The binary will be output to `dist/specmcp`.
 
-### Go install
+### Go Install
 
 ```bash
 go install github.com/emergent-company/specmcp/cmd/specmcp@latest
+```
+
+## Upgrading
+
+If you installed via the install script or manually, you can upgrade with:
+
+```bash
+specmcp upgrade
+```
+
+Or re-run the install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emergent-company/specmcp/main/install.sh | sh -s -- upgrade
 ```
 
 ## Configuration
