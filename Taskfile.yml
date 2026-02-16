@@ -109,8 +109,14 @@ tasks:
     deps: [build-all]
     cmds:
       - echo "Creating release archives..."
-      - cd {{.OUTDIR}} && for f in {{.BINARY}}-*; do tar -czvf $${f}.tar.gz $${f} && sha256sum $${f}.tar.gz > $${f}.tar.gz.sha256; done
-      - cd {{.OUTDIR}} && cat *.sha256 > checksums.txt
+      - |
+        cd {{.OUTDIR}}
+        for f in {{.BINARY}}-*; do
+          [ -f "$f" ] || continue
+          tar -czvf ${f}.tar.gz ${f}
+          sha256sum ${f}.tar.gz > ${f}.tar.gz.sha256
+        done
+        cat *.sha256 > checksums.txt
       - echo "Release archives created in {{.OUTDIR}}/"
       - ls -lh {{.OUTDIR}}/*.tar.gz
 
