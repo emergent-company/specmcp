@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Cross-compile (linux/amd64)
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags "-s -w -X main.Version=${GITHUB_REF_NAME:-dev}" \
+            -o specmcp ./cmd/specmcp/
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: specmcp-linux-amd64
+          path: specmcp
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: specmcp-linux-amd64
+
+      - name: Build pacman package
+        run: |
+          # Install base-devel for makepkg (fakeroot, etc.)
+          pacman -Syu --noconfirm base-devel
+
+          # makepkg refuses to run as root — create a builder user
+          useradd -m builder
+
+          # Set up build directory with sources in src/ (where makepkg expects them)
+          mkdir -p /build/src
+          cp deploy/PKGBUILD /build/
+          cp deploy/specmcp.service /build/src/
+          cp deploy/specmcp.env /build/src/
+          chmod 755 specmcp
+          cp specmcp /build/src/
+          chown -R builder:builder /build
+
+          # Build the package (--noextract: sources already in src/, --nodeps: no runtime deps)
+          cd /build
+          su builder -c 'makepkg --noextract --nodeps --skipinteg'
+
+          # Copy result out
+          cp /build/*.pkg.tar.zst ${GITHUB_WORKSPACE}/
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: specmcp-pkg
+          path: '*.pkg.tar.zst'
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            specmcp-linux-amd64/specmcp
+            specmcp-pkg/*.pkg.tar.zst

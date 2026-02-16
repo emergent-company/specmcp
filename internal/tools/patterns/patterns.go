@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_suggest_patterns ---
@@ -20,11 +20,11 @@ type suggestPatternsParams struct {
 }
 
 type SuggestPatterns struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewSuggestPatterns(client *emergent.Client) *SuggestPatterns {
-	return &SuggestPatterns{client: client}
+func NewSuggestPatterns(factory *emergent.ClientFactory) *SuggestPatterns {
+	return &SuggestPatterns{factory: factory}
 }
 
 func (t *SuggestPatterns) Name() string { return "spec_suggest_patterns" }
@@ -57,8 +57,13 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 		return mcp.ErrorResult("entity_id is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Get the target entity
-	obj, err := t.client.GetObject(ctx, p.EntityID)
+	obj, err := client.GetObject(ctx, p.EntityID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("entity not found: %v", err)), nil
 	}
@@ -70,7 +75,7 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 
 	// Get patterns already used by this entity
 	usedPatterns := make(map[string]bool)
-	usedRels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+	usedRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelUsesPattern,
 		SrcID: p.EntityID,
 		Limit: 50,
@@ -82,7 +87,7 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 	}
 
 	// Find patterns used by other entities of the same type
-	sameTypeEntities, err := t.client.ListObjects(ctx, &graph.ListObjectsOptions{
+	sameTypeEntities, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
 		Type:  entityType,
 		Limit: 20,
 	})
@@ -96,7 +101,7 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 		if entity.ID == p.EntityID {
 			continue
 		}
-		edges, err := t.client.GetObjectEdges(ctx, entity.ID, &graph.GetObjectEdgesOptions{
+		edges, err := client.GetObjectEdges(ctx, entity.ID, &graph.GetObjectEdgesOptions{
 			Types:     []string{emergent.RelUsesPattern},
 			Direction: "outgoing",
 		})
@@ -109,13 +114,13 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 	}
 
 	// Also check if any constitution requires patterns for this entity type
-	constitutions, err := t.client.ListObjects(ctx, &graph.ListObjectsOptions{
+	constitutions, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
 		Type:  emergent.TypeConstitution,
 		Limit: 10,
 	})
 	if err == nil {
 		for _, c := range constitutions {
-			edges, err := t.client.GetObjectEdges(ctx, c.ID, &graph.GetObjectEdgesOptions{
+			edges, err := client.GetObjectEdges(ctx, c.ID, &graph.GetObjectEdgesOptions{
 				Types:     []string{emergent.RelRequiresPattern},
 				Direction: "outgoing",
 			})
@@ -139,7 +144,7 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 	}
 	var patternIdx emergent.ObjectIndex
 	if len(patternIDs) > 0 {
-		objs, err := t.client.GetObjects(ctx, patternIDs)
+		objs, err := client.GetObjects(ctx, patternIDs)
 		if err == nil {
 			patternIdx = emergent.NewObjectIndex(objs)
 		}
@@ -197,11 +202,11 @@ type applyPatternParams struct {
 }
 
 type ApplyPattern struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewApplyPattern(client *emergent.Client) *ApplyPattern {
-	return &ApplyPattern{client: client}
+func NewApplyPattern(factory *emergent.ClientFactory) *ApplyPattern {
+	return &ApplyPattern{factory: factory}
 }
 
 func (t *ApplyPattern) Name() string { return "spec_apply_pattern" }
@@ -228,18 +233,23 @@ func (t *ApplyPattern) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult("entity_id and pattern_id are required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Verify both exist
-	entity, err := t.client.GetObject(ctx, p.EntityID)
+	entity, err := client.GetObject(ctx, p.EntityID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("entity not found: %v", err)), nil
 	}
-	pattern, err := t.client.GetObject(ctx, p.PatternID)
+	pattern, err := client.GetObject(ctx, p.PatternID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("pattern not found: %v", err)), nil
 	}
 
 	// Check if already applied
-	already, err := t.client.HasRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID)
+	already, err := client.HasRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID)
 	if err != nil {
 		return nil, fmt.Errorf("checking existing relationship: %w", err)
 	}
@@ -248,7 +258,7 @@ func (t *ApplyPattern) Execute(ctx context.Context, params json.RawMessage) (*mc
 	}
 
 	// Create the relationship
-	if _, err := t.client.CreateRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID, nil); err != nil {
+	if _, err := client.CreateRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID, nil); err != nil {
 		return nil, fmt.Errorf("creating uses_pattern relationship: %w", err)
 	}
 

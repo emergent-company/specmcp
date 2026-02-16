@@ -1,0 +1,53 @@
+# SpecMCP Configuration
+#
+# This file is optional. All values have sensible defaults.
+# Environment variables always override values set here.
+#
+# Config file search order (first found wins):
+#   1. --config flag
+#   2. SPECMCP_CONFIG env var
+#   3. ./specmcp.toml (current directory)
+#   4. ~/.config/specmcp/specmcp.toml
+
+# ── Emergent Connection ──────────────────────────────────────────────
+
+[emergent]
+# Emergent server URL.
+# Env: EMERGENT_URL
+# url = "http://localhost:3002"
+
+# Project-scoped token (emt_*). Required for stdio mode.
+# In HTTP mode, each client sends their own token as the Bearer header
+# and this field is not needed.
+# Env: EMERGENT_TOKEN or EMERGENT_API_KEY
+# token = ""
+
+# Explicit project ID. Only needed with standalone API keys (not emt_* tokens).
+# Env: EMERGENT_PROJECT_ID
+# project_id = ""
+
+# ── Transport ────────────────────────────────────────────────────────
+
+[transport]
+# Transport mode: "stdio" or "http".
+# Env: SPECMCP_TRANSPORT
+# mode = "stdio"
+
+# HTTP listen port. Only used when mode = "http".
+# Env: SPECMCP_PORT
+# port = "21452"
+
+# HTTP listen address. Only used when mode = "http".
+# Env: SPECMCP_HOST
+# host = "0.0.0.0"
+
+# Comma-separated list of allowed CORS origins. Only used when mode = "http".
+# Env: SPECMCP_CORS_ORIGINS
+# cors_origins = "*"
+
+# ── Logging ──────────────────────────────────────────────────────────
+
+[log]
+# Log level: debug, info, warn, error.
+# Env: SPECMCP_LOG_LEVEL
+# level = "info"

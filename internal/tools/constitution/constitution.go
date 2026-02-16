@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_validate_constitution ---
@@ -21,11 +21,11 @@ type validateParams struct {
 // ValidateConstitution checks if a change's entities comply with the
 // governing constitution's required and forbidden pattern rules.
 type ValidateConstitution struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewValidateConstitution(client *emergent.Client) *ValidateConstitution {
-	return &ValidateConstitution{client: client}
+func NewValidateConstitution(factory *emergent.ClientFactory) *ValidateConstitution {
+	return &ValidateConstitution{factory: factory}
 }
 
 func (t *ValidateConstitution) Name() string { return "spec_validate_constitution" }
@@ -54,8 +54,13 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Get the constitution governing this change
-	constitutionRels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+	constitutionRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelGovernedBy,
 		SrcID: p.ChangeID,
 		Limit: 1,
@@ -72,26 +77,26 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 	}
 
 	constitutionID := constitutionRels[0].DstID
-	constitution, err := t.client.GetObject(ctx, constitutionID)
+	constitution, err := client.GetObject(ctx, constitutionID)
 	if err != nil {
 		return nil, fmt.Errorf("getting constitution: %w", err)
 	}
 
 	// Get required patterns
-	requiredPatterns, err := t.getRelatedPatterns(ctx, constitutionID, emergent.RelRequiresPattern)
+	requiredPatterns, err := t.getRelatedPatterns(ctx, client, constitutionID, emergent.RelRequiresPattern)
 	if err != nil {
 		return nil, fmt.Errorf("getting required patterns: %w", err)
 	}
 
 	// Get forbidden patterns
-	forbiddenPatterns, err := t.getRelatedPatterns(ctx, constitutionID, emergent.RelForbidsPattern)
+	forbiddenPatterns, err := t.getRelatedPatterns(ctx, client, constitutionID, emergent.RelForbidsPattern)
 	if err != nil {
 		return nil, fmt.Errorf("getting forbidden patterns: %w", err)
 	}
 
 	// Collect all entities that belong to this change (specs, contexts, components, actions)
 	// These are the entity types that can use patterns
-	patternEntities, err := t.collectPatternEntities(ctx, p.ChangeID)
+	patternEntities, err := t.collectPatternEntities(ctx, client, p.ChangeID)
 	if err != nil {
 		return nil, fmt.Errorf("collecting entities: %w", err)
 	}
@@ -102,7 +107,7 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 
 	for _, entity := range patternEntities {
 		// Get patterns used by this entity
-		usedPatterns, err := t.getUsedPatterns(ctx, entity["id"].(string))
+		usedPatterns, err := t.getUsedPatterns(ctx, client, entity["id"].(string))
 		if err != nil {
 			continue
 		}
@@ -181,8 +186,8 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 // getRelatedPatterns returns a map of pattern ID → name for patterns linked via relType.
 // Keys are the objects' primary IDs (from GetObjects) rather than relationship DstIDs
 // to avoid ID mismatch when comparing against getUsedPatterns results.
-func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, srcID, relType string) (map[string]string, error) {
-	rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, client *emergent.Client, srcID, relType string) (map[string]string, error) {
+	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  relType,
 		SrcID: srcID,
 		Limit: 50,
@@ -198,7 +203,7 @@ func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, srcID, re
 	for i, rel := range rels {
 		ids[i] = rel.DstID
 	}
-	objs, err := t.client.GetObjects(ctx, ids)
+	objs, err := client.GetObjects(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -220,9 +225,9 @@ func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, srcID, re
 
 // collectPatternEntities gathers all entities belonging to a change that can use patterns.
 // This includes: Specs → Contexts/Components/Actions (via implements), and direct relationships.
-func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, changeID string) ([]map[string]any, error) {
+func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, client *emergent.Client, changeID string) ([]map[string]any, error) {
 	// Get all entities reachable from the change within 2 hops
-	expanded, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	expanded, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:   []string{changeID},
 		Direction: "outgoing",
 		MaxDepth:  2,
@@ -274,8 +279,8 @@ func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, chang
 // getUsedPatterns returns the IDs of patterns applied to an entity.
 // Returns resolved object IDs (from GetObjects) rather than raw relationship DstIDs
 // to ensure consistency with getRelatedPatterns lookups.
-func (t *ValidateConstitution) getUsedPatterns(ctx context.Context, entityID string) ([]string, error) {
-	rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+func (t *ValidateConstitution) getUsedPatterns(ctx context.Context, client *emergent.Client, entityID string) ([]string, error) {
+	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelUsesPattern,
 		SrcID: entityID,
 		Limit: 50,
@@ -291,7 +296,7 @@ func (t *ValidateConstitution) getUsedPatterns(ctx context.Context, entityID str
 	for i, rel := range rels {
 		relIDs[i] = rel.DstID
 	}
-	objs, err := t.client.GetObjects(ctx, relIDs)
+	objs, err := client.GetObjects(ctx, relIDs)
 	if err != nil {
 		// Fall back to raw DstIDs if GetObjects fails
 		return relIDs, nil

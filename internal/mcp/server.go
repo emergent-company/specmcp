@@ -10,7 +10,9 @@ import (
 	"os"
 )
 
-// Server implements the MCP protocol over stdio.
+// Server implements the MCP protocol. It handles JSON-RPC dispatch independent
+// of transport. The Run method provides stdio transport; HTTPHandler provides
+// Streamable HTTP transport.
 type Server struct {
 	registry *Registry
 	info     ServerInfo
@@ -48,7 +50,7 @@ func (s *Server) Run(ctx context.Context) error {
 			continue
 		}
 
-		resp := s.handleMessage(ctx, line)
+		resp := s.HandleMessage(ctx, line)
 		if resp != nil {
 			if err := encoder.Encode(resp); err != nil {
 				s.logger.Error("failed to write response", "error", err)
@@ -65,8 +67,9 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
-// handleMessage parses a JSON-RPC request and dispatches to the appropriate handler.
-func (s *Server) handleMessage(ctx context.Context, data []byte) *Response {
+// HandleMessage parses a JSON-RPC request and dispatches to the appropriate handler.
+// It is exported so that alternate transports (e.g. HTTP) can reuse the same dispatch logic.
+func (s *Server) HandleMessage(ctx context.Context, data []byte) *Response {
 	var req Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		s.logger.Error("failed to parse request", "error", err)

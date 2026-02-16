@@ -1,0 +1,10 @@
+dist/
+.git/
+.env
+.env.local
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

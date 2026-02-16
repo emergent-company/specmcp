@@ -6,11 +6,33 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
-	"github.com/emergent-company/specmcp/internal/config"
 	sdk "github.com/emergent-company/emergent/apps/server-go/pkg/sdk"
 	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
+
+// contextKey is an unexported type for context keys in this package.
+type contextKey struct{}
+
+// tokenKey is the context key for the Emergent auth token.
+var tokenKey = contextKey{}
+
+// WithToken returns a context carrying the given Emergent auth token.
+// The token is used by ClientFactory.ClientFor to create per-request SDK clients.
+func WithToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, tokenKey, token)
+}
+
+// TokenFrom extracts the Emergent auth token from the context.
+// Returns empty string if no token is present.
+func TokenFrom(ctx context.Context) string {
+	if v, ok := ctx.Value(tokenKey).(string); ok {
+		return v
+	}
+	return ""
+}
 
 // Client wraps the Emergent SDK with domain-specific operations for SpecMCP.
 type Client struct {
@@ -18,22 +40,71 @@ type Client struct {
 	logger *slog.Logger
 }
 
-// New creates a new Emergent client from configuration.
-// The project token (emt_*) carries project scope, so no separate project ID is needed.
-// If ProjectID is set, it is passed as X-Project-ID header for standalone API keys.
-func New(cfg *config.EmergentConfig, logger *slog.Logger) (*Client, error) {
+// ClientFactory creates per-request Emergent clients. It holds the shared
+// configuration (server URL) and a shared http.Client for connection pooling.
+// Each request gets its own SDK client with the auth token from context.
+//
+// This enables a multi-tenant architecture where different MCP clients can
+// connect with different Emergent project tokens through the same SpecMCP server.
+type ClientFactory struct {
+	serverURL  string
+	httpClient *http.Client
+	logger     *slog.Logger
+}
+
+// NewClientFactory creates a factory for per-request Emergent clients.
+// The shared http.Client reuses TCP connections across requests.
+func NewClientFactory(serverURL string, logger *slog.Logger) *ClientFactory {
+	return &ClientFactory{
+		serverURL: serverURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		logger: logger,
+	}
+}
+
+// ClientFor creates an Emergent client using the auth token from the context.
+// Each call creates a lightweight SDK client (~28 allocations, zero I/O) that
+// shares the factory's connection pool. Returns an error if no token is in context.
+func (f *ClientFactory) ClientFor(ctx context.Context) (*Client, error) {
+	token := TokenFrom(ctx)
+	if token == "" {
+		return nil, fmt.Errorf("no emergent token in request context")
+	}
+
 	sdkClient, err := sdk.New(sdk.Config{
-		ServerURL: cfg.URL,
+		ServerURL: f.serverURL,
 		Auth: sdk.AuthConfig{
 			Mode:   "apikey",
-			APIKey: cfg.Token,
+			APIKey: token,
 		},
-		ProjectID: cfg.ProjectID,
+		HTTPClient: f.httpClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating SDK client: %w", err)
 	}
 
+	return &Client{
+		sdk:    sdkClient,
+		logger: f.logger,
+	}, nil
+}
+
+// NewClient creates a Client with a fixed auth token. Use this for CLI tools
+// (like the seed script) that operate with a single known token rather than
+// per-request tokens from HTTP headers.
+func NewClient(serverURL, token string, logger *slog.Logger) (*Client, error) {
+	sdkClient, err := sdk.New(sdk.Config{
+		ServerURL: serverURL,
+		Auth: sdk.AuthConfig{
+			Mode:   "apikey",
+			APIKey: token,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating SDK client: %w", err)
+	}
 	return &Client{
 		sdk:    sdkClient,
 		logger: logger,

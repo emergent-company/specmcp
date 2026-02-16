@@ -150,11 +150,11 @@ type seedPatternsParams struct {
 
 // SeedPatterns creates standard patterns from the built-in pattern library.
 type SeedPatterns struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewSeedPatterns(client *emergent.Client) *SeedPatterns {
-	return &SeedPatterns{client: client}
+func NewSeedPatterns(factory *emergent.ClientFactory) *SeedPatterns {
+	return &SeedPatterns{factory: factory}
 }
 
 func (t *SeedPatterns) Name() string { return "spec_seed_patterns" }
@@ -184,6 +184,11 @@ func (t *SeedPatterns) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Build filter set
 	typeFilter := make(map[string]bool)
 	for _, typ := range p.Types {
@@ -201,7 +206,7 @@ func (t *SeedPatterns) Execute(ctx context.Context, params json.RawMessage) (*mc
 
 		// Check if pattern already exists
 		if !p.Force {
-			existing, err := t.client.FindByTypeAndKey(ctx, emergent.TypePattern, seed.Name)
+			existing, err := client.FindByTypeAndKey(ctx, emergent.TypePattern, seed.Name)
 			if err == nil && existing != nil {
 				skipped = append(skipped, seed.Name)
 				continue
@@ -223,7 +228,7 @@ func (t *SeedPatterns) Execute(ctx context.Context, params json.RawMessage) (*mc
 		}
 
 		key := seed.Name
-		obj, err := t.client.CreateObject(ctx, emergent.TypePattern, &key, props, []string{
+		obj, err := client.CreateObject(ctx, emergent.TypePattern, &key, props, []string{
 			fmt.Sprintf("pattern:%s", seed.Type),
 			fmt.Sprintf("scope:%s", seed.Scope),
 		})

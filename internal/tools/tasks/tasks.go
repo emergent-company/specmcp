@@ -10,10 +10,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/guards"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_generate_tasks ---
@@ -36,11 +36,11 @@ type taskDefinition struct {
 }
 
 type GenerateTasks struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGenerateTasks(client *emergent.Client) *GenerateTasks {
-	return &GenerateTasks{client: client}
+func NewGenerateTasks(factory *emergent.ClientFactory) *GenerateTasks {
+	return &GenerateTasks{factory: factory}
 }
 
 func (t *GenerateTasks) Name() string { return "spec_generate_tasks" }
@@ -91,8 +91,13 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		return mcp.ErrorResult("at least one task is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Verify change exists and has a ready design
-	_, err := t.client.GetChange(ctx, p.ChangeID)
+	_, err = client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
@@ -102,7 +107,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		ChangeID:     p.ChangeID,
 		ArtifactType: "task",
 	}
-	if err := guards.PopulateChangeState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state: %w", err)
 	}
 	runner := guards.NewRunner()
@@ -123,7 +128,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		default:
 		}
 
-		task, err := t.client.CreateTask(ctx, p.ChangeID, &emergent.Task{
+		task, err := client.CreateTask(ctx, p.ChangeID, &emergent.Task{
 			Number:             td.Number,
 			Description:        td.Description,
 			TaskType:           td.TaskType,
@@ -162,7 +167,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 			if !ok {
 				continue // silently skip unknown task numbers
 			}
-			if _, err := t.client.CreateRelationship(ctx, emergent.RelBlocks, taskID, blockedID, nil); err != nil {
+			if _, err := client.CreateRelationship(ctx, emergent.RelBlocks, taskID, blockedID, nil); err != nil {
 				return nil, fmt.Errorf("creating blocks %s→%s: %w", td.Number, blocksNum, err)
 			}
 			relCount++
@@ -172,7 +177,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		if td.ParentTaskNumber != "" {
 			parentID, ok := numberToID[td.ParentTaskNumber]
 			if ok {
-				if _, err := t.client.CreateRelationship(ctx, emergent.RelHasSubtask, parentID, taskID, nil); err != nil {
+				if _, err := client.CreateRelationship(ctx, emergent.RelHasSubtask, parentID, taskID, nil); err != nil {
 					return nil, fmt.Errorf("creating subtask %s→%s: %w", td.ParentTaskNumber, td.Number, err)
 				}
 				relCount++
@@ -181,7 +186,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 
 		// Create implements relationship
 		if td.Implements != "" {
-			if _, err := t.client.CreateRelationship(ctx, emergent.RelImplements, taskID, td.Implements, nil); err != nil {
+			if _, err := client.CreateRelationship(ctx, emergent.RelImplements, taskID, td.Implements, nil); err != nil {
 				return nil, fmt.Errorf("creating implements for %s: %w", td.Number, err)
 			}
 			relCount++
@@ -210,11 +215,11 @@ type getAvailableTasksParams struct {
 }
 
 type GetAvailableTasks struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetAvailableTasks(client *emergent.Client) *GetAvailableTasks {
-	return &GetAvailableTasks{client: client}
+func NewGetAvailableTasks(factory *emergent.ClientFactory) *GetAvailableTasks {
+	return &GetAvailableTasks{factory: factory}
 }
 
 func (t *GetAvailableTasks) Name() string { return "spec_get_available_tasks" }
@@ -243,7 +248,12 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
-	tasks, err := t.client.ListTasks(ctx, p.ChangeID)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	tasks, err := client.ListTasks(ctx, p.ChangeID)
 	if err != nil {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}
@@ -266,7 +276,7 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 	blockedByMap := make(map[string][]string) // task.ID → []blocker task.IDs
 	assignedSet := make(map[string]bool)      // task.IDs that have assignments
 
-	resp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	resp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:           []string{p.ChangeID},
 		Direction:         "outgoing",
 		MaxDepth:          2,
@@ -301,14 +311,14 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 			if task.Status != emergent.StatusPending {
 				continue
 			}
-			blocked, err := t.isBlocked(ctx, task.ID, taskStatus)
+			blocked, err := t.isBlocked(ctx, client, task.ID, taskStatus)
 			if err != nil {
 				return nil, fmt.Errorf("checking if task %s is blocked: %w", task.Number, err)
 			}
 			if blocked {
 				blockedByMap[task.ID] = []string{"unknown"}
 			}
-			assigned, err := t.isAssigned(ctx, task.ID)
+			assigned, err := t.isAssigned(ctx, client, task.ID)
 			if err != nil {
 				return nil, fmt.Errorf("checking assignment for %s: %w", task.Number, err)
 			}
@@ -368,9 +378,9 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 }
 
 // isBlocked checks if a task is blocked by any incomplete task via blocked_by relationships.
-func (t *GetAvailableTasks) isBlocked(ctx context.Context, taskID string, taskStatus map[string]string) (bool, error) {
+func (t *GetAvailableTasks) isBlocked(ctx context.Context, client *emergent.Client, taskID string, taskStatus map[string]string) (bool, error) {
 	// Look for incoming "blocks" relationships (i.e., things that block this task)
-	rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelBlocks,
 		DstID: taskID,
 		Limit: 50,
@@ -393,8 +403,8 @@ func (t *GetAvailableTasks) isBlocked(ctx context.Context, taskID string, taskSt
 }
 
 // isAssigned checks if a task has an assigned_to relationship.
-func (t *GetAvailableTasks) isAssigned(ctx context.Context, taskID string) (bool, error) {
-	rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+func (t *GetAvailableTasks) isAssigned(ctx context.Context, client *emergent.Client, taskID string) (bool, error) {
+	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelAssignedTo,
 		SrcID: taskID,
 		Limit: 1,
@@ -413,11 +423,11 @@ type assignTaskParams struct {
 }
 
 type AssignTask struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewAssignTask(client *emergent.Client) *AssignTask {
-	return &AssignTask{client: client}
+func NewAssignTask(factory *emergent.ClientFactory) *AssignTask {
+	return &AssignTask{factory: factory}
 }
 
 func (t *AssignTask) Name() string { return "spec_assign_task" }
@@ -444,8 +454,13 @@ func (t *AssignTask) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult("task_id and agent_id are required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Get task to verify it exists and is assignable
-	task, err := t.client.GetTask(ctx, p.TaskID)
+	task, err := client.GetTask(ctx, p.TaskID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("task not found: %v", err)), nil
 	}
@@ -454,19 +469,19 @@ func (t *AssignTask) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	}
 
 	// Verify agent exists
-	_, err = t.client.GetObject(ctx, p.AgentID)
+	_, err = client.GetObject(ctx, p.AgentID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("agent not found: %v", err)), nil
 	}
 
 	// Create assigned_to relationship
-	if _, err := t.client.CreateRelationship(ctx, emergent.RelAssignedTo, p.TaskID, p.AgentID, nil); err != nil {
+	if _, err := client.CreateRelationship(ctx, emergent.RelAssignedTo, p.TaskID, p.AgentID, nil); err != nil {
 		return nil, fmt.Errorf("creating assignment: %w", err)
 	}
 
 	// Update task status to in_progress with started_at
 	now := time.Now()
-	task, err = t.client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusInProgress, map[string]any{
+	task, err = client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusInProgress, map[string]any{
 		"started_at": now.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -492,11 +507,11 @@ type completeTaskParams struct {
 }
 
 type CompleteTask struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewCompleteTask(client *emergent.Client) *CompleteTask {
-	return &CompleteTask{client: client}
+func NewCompleteTask(factory *emergent.ClientFactory) *CompleteTask {
+	return &CompleteTask{factory: factory}
 }
 
 func (t *CompleteTask) Name() string { return "spec_complete_task" }
@@ -531,8 +546,13 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult("task_id is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Get task
-	task, err := t.client.GetTask(ctx, p.TaskID)
+	task, err := client.GetTask(ctx, p.TaskID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("task not found: %v", err)), nil
 	}
@@ -558,7 +578,7 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 		props["actual_hours"] = hours
 	}
 
-	task, err = t.client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusCompleted, props)
+	task, err = client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusCompleted, props)
 	if err != nil {
 		return nil, fmt.Errorf("completing task: %w", err)
 	}
@@ -566,7 +586,7 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 	// Find tasks that this task was blocking and check if they're now unblocked
 	// Use ExpandGraph to batch-fetch blocked tasks and all their blockers in one call
 	unblocked := make([]map[string]any, 0)
-	expandResp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	expandResp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:           []string{p.TaskID},
 		Direction:         "both",
 		MaxDepth:          2,
@@ -657,11 +677,11 @@ type getCriticalPathParams struct {
 }
 
 type GetCriticalPath struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetCriticalPath(client *emergent.Client) *GetCriticalPath {
-	return &GetCriticalPath{client: client}
+func NewGetCriticalPath(factory *emergent.ClientFactory) *GetCriticalPath {
+	return &GetCriticalPath{factory: factory}
 }
 
 func (t *GetCriticalPath) Name() string { return "spec_get_critical_path" }
@@ -690,8 +710,13 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Get all tasks for the change
-	tasks, err := t.client.ListTasks(ctx, p.ChangeID)
+	tasks, err := client.ListTasks(ctx, p.ChangeID)
 	if err != nil {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}
@@ -720,7 +745,7 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 	// Get all blocks relationships among these tasks using a single ExpandGraph call
 	blocksGraph := make(map[string][]string) // blocker → []blocked
 	blockedBy := make(map[string][]string)   // blocked → []blockers
-	expandResp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	expandResp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:           []string{p.ChangeID},
 		Direction:         "outgoing",
 		MaxDepth:          2,
@@ -748,7 +773,7 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 	} else {
 		// Fallback: individual relationship lookups
 		for _, task := range tasks {
-			rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+			rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 				Type:  emergent.RelBlocks,
 				SrcID: task.ID,
 				Limit: 50,

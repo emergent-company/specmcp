@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // specMarkReadyParams defines the input for spec_mark_ready.
@@ -18,12 +18,12 @@ type specMarkReadyParams struct {
 // SpecMarkReady marks a workflow artifact as ready after validating
 // that all its children (if any) are already ready.
 type SpecMarkReady struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
 // NewSpecMarkReady creates a SpecMarkReady tool.
-func NewSpecMarkReady(client *emergent.Client) *SpecMarkReady {
-	return &SpecMarkReady{client: client}
+func NewSpecMarkReady(factory *emergent.ClientFactory) *SpecMarkReady {
+	return &SpecMarkReady{factory: factory}
 }
 
 func (t *SpecMarkReady) Name() string { return "spec_mark_ready" }
@@ -59,12 +59,17 @@ func (t *SpecMarkReady) Execute(ctx context.Context, params json.RawMessage) (*m
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.EntityID == "" {
 		return mcp.ErrorResult("entity_id is required"), nil
 	}
 
 	// Fetch the entity to determine its type
-	obj, err := t.client.GetObject(ctx, p.EntityID)
+	obj, err := client.GetObject(ctx, p.EntityID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("entity not found: %v", err)), nil
 	}
@@ -100,7 +105,7 @@ func (t *SpecMarkReady) Execute(ctx context.Context, params json.RawMessage) (*m
 	// Validate children are all ready (if this type has children)
 	var blockers []blocker
 	if len(childRelTypes) > 0 {
-		blockers, err = t.findUnreadyChildren(ctx, obj.ID, childRelTypes)
+		blockers, err = t.findUnreadyChildren(ctx, client, obj.ID, childRelTypes)
 		if err != nil {
 			return nil, fmt.Errorf("checking children readiness: %w", err)
 		}
@@ -118,7 +123,7 @@ func (t *SpecMarkReady) Execute(ctx context.Context, params json.RawMessage) (*m
 	}
 
 	// All children ready (or no children) — mark as ready
-	_, err = t.client.UpdateObject(ctx, obj.ID, map[string]any{"status": emergent.StatusReady}, nil)
+	_, err = client.UpdateObject(ctx, obj.ID, map[string]any{"status": emergent.StatusReady}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("updating status to ready: %w", err)
 	}
@@ -146,7 +151,7 @@ func (t *SpecMarkReady) Execute(ctx context.Context, params json.RawMessage) (*m
 // For Requirements, this checks Scenarios (depth 1).
 // A Spec also needs to recursively check that its Requirements' Scenarios are ready,
 // so we expand to depth 2 when checking a Spec.
-func (t *SpecMarkReady) findUnreadyChildren(ctx context.Context, entityID string, childRelTypes []string) ([]blocker, error) {
+func (t *SpecMarkReady) findUnreadyChildren(ctx context.Context, client *emergent.Client, entityID string, childRelTypes []string) ([]blocker, error) {
 	// Determine expand depth: Spec needs depth 2 (req→scenario), others need depth 1
 	maxDepth := 1
 	allRelTypes := childRelTypes
@@ -156,7 +161,7 @@ func (t *SpecMarkReady) findUnreadyChildren(ctx context.Context, entityID string
 		allRelTypes = []string{emergent.RelHasRequirement, emergent.RelHasScenario}
 	}
 
-	resp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	resp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:           []string{entityID},
 		Direction:         "outgoing",
 		MaxDepth:          maxDepth,

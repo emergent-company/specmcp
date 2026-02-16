@@ -24,15 +24,15 @@ type specNewParams struct {
 
 // SpecNew creates a new Change with its Proposal.
 type SpecNew struct {
-	client *emergent.Client
-	runner *guards.Runner
+	factory *emergent.ClientFactory
+	runner  *guards.Runner
 }
 
 // NewSpecNew creates a SpecNew tool.
-func NewSpecNew(client *emergent.Client) *SpecNew {
+func NewSpecNew(factory *emergent.ClientFactory) *SpecNew {
 	return &SpecNew{
-		client: client,
-		runner: guards.NewRunner(),
+		factory: factory,
+		runner:  guards.NewRunner(),
 	}
 }
 
@@ -82,6 +82,11 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.Name == "" {
 		return mcp.ErrorResult("name is required"), nil
 	}
@@ -91,7 +96,7 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 
 	// Check for duplicate active change (this stays as a direct check — it's not a guard
 	// because it needs change-specific lookup rather than GuardContext state).
-	existing, err := t.client.FindChange(ctx, p.Name)
+	existing, err := client.FindChange(ctx, p.Name)
 	if err != nil {
 		return nil, fmt.Errorf("checking for existing change: %w", err)
 	}
@@ -107,7 +112,7 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 		ChangeName: p.Name,
 		Force:      p.Force,
 	}
-	if err := guards.PopulateProjectState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateProjectState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating project state for guards: %w", err)
 	}
 
@@ -118,7 +123,7 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 	}
 
 	// Create the Change
-	change, err := t.client.CreateChange(ctx, &emergent.Change{
+	change, err := client.CreateChange(ctx, &emergent.Change{
 		Name:   p.Name,
 		Status: emergent.StatusActive,
 		Tags:   p.Tags,
@@ -128,7 +133,7 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 	}
 
 	// Create the Proposal linked to the Change
-	proposal, err := t.client.CreateProposal(ctx, change.ID, &emergent.Proposal{
+	proposal, err := client.CreateProposal(ctx, change.ID, &emergent.Proposal{
 		Intent: p.Intent,
 		Scope:  p.Scope,
 		Impact: p.Impact,

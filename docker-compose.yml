@@ -1,0 +1,29 @@
+# Example docker-compose for running SpecMCP as a standalone HTTP server.
+# Copy to docker-compose.yml and fill in your secrets.
+
+services:
+  specmcp:
+    build:
+      context: .
+      args:
+        VERSION: "${VERSION:-dev}"
+    ports:
+      - "${SPECMCP_PORT:-21452}:21452"
+    environment:
+      # Required: Emergent server URL
+      EMERGENT_URL: "${EMERGENT_URL:-http://host.docker.internal:3002}"
+
+      # Optional
+      EMERGENT_PROJECT_ID: "${EMERGENT_PROJECT_ID:-}"
+      SPECMCP_TRANSPORT: "http"
+      SPECMCP_PORT: "21452"
+      SPECMCP_HOST: "0.0.0.0"
+      SPECMCP_CORS_ORIGINS: "${SPECMCP_CORS_ORIGINS:-*}"
+      SPECMCP_LOG_LEVEL: "${SPECMCP_LOG_LEVEL:-info}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:21452/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

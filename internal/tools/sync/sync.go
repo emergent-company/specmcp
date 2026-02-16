@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_sync_status ---
@@ -21,11 +21,11 @@ type syncStatusParams struct {
 }
 
 type SyncStatus struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewSyncStatus(client *emergent.Client) *SyncStatus {
-	return &SyncStatus{client: client}
+func NewSyncStatus(factory *emergent.ClientFactory) *SyncStatus {
+	return &SyncStatus{factory: factory}
 }
 
 func (t *SyncStatus) Name() string { return "spec_sync_status" }
@@ -50,6 +50,11 @@ func (t *SyncStatus) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Find the most recent GraphSync entity
 	opts := &graph.ListObjectsOptions{
 		Type:  emergent.TypeGraphSync,
@@ -57,7 +62,7 @@ func (t *SyncStatus) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		Order: "desc",
 	}
 
-	objs, err := t.client.ListObjects(ctx, opts)
+	objs, err := client.ListObjects(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("listing sync records: %w", err)
 	}
@@ -92,11 +97,11 @@ type graphSummaryParams struct {
 
 // GraphSummary returns a summary of all entities in the graph, grouped by type.
 type GraphSummary struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGraphSummary(client *emergent.Client) *GraphSummary {
-	return &GraphSummary{client: client}
+func NewGraphSummary(factory *emergent.ClientFactory) *GraphSummary {
+	return &GraphSummary{factory: factory}
 }
 
 func (t *GraphSummary) Name() string { return "spec_graph_summary" }
@@ -121,6 +126,11 @@ func (t *GraphSummary) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	entityTypes := []string{
 		emergent.TypeChange, emergent.TypeProposal, emergent.TypeSpec,
 		emergent.TypeRequirement, emergent.TypeScenario, emergent.TypeScenarioStep,
@@ -142,7 +152,7 @@ func (t *GraphSummary) Execute(ctx context.Context, params json.RawMessage) (*mc
 	for i, typeName := range entityTypes {
 		go func(idx int, tn string) {
 			defer wg.Done()
-			count, err := t.client.CountObjects(ctx, tn)
+			count, err := client.CountObjects(ctx, tn)
 			if err != nil {
 				results[idx] = countResult{typeName: tn, count: -1}
 				return
@@ -163,7 +173,7 @@ func (t *GraphSummary) Execute(ctx context.Context, params json.RawMessage) (*mc
 
 	// Get active changes for a quick status overview
 	activeChanges := make([]map[string]any, 0)
-	changes, err := t.client.ListObjects(ctx, &graph.ListObjectsOptions{
+	changes, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
 		Type:  emergent.TypeChange,
 		Limit: 20,
 	})
@@ -200,11 +210,11 @@ type syncParams struct {
 }
 
 type Sync struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewSync(client *emergent.Client) *Sync {
-	return &Sync{client: client}
+func NewSync(factory *emergent.ClientFactory) *Sync {
+	return &Sync{factory: factory}
 }
 
 func (t *Sync) Name() string { return "spec_sync" }
@@ -237,6 +247,11 @@ func (t *Sync) Execute(ctx context.Context, params json.RawMessage) (*mcp.ToolsC
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	now := time.Now()
 
 	if p.DryRun {
@@ -258,7 +273,7 @@ func (t *Sync) Execute(ctx context.Context, params json.RawMessage) (*mcp.ToolsC
 	}
 
 	key := fmt.Sprintf("sync-%s", now.Format("20060102-150405"))
-	obj, err := t.client.CreateObject(ctx, emergent.TypeGraphSync, &key, props, nil)
+	obj, err := client.CreateObject(ctx, emergent.TypeGraphSync, &key, props, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating sync record: %w", err)
 	}

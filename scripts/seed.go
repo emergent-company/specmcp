@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/emergent-company/specmcp/internal/config"
 	sdk "github.com/emergent-company/emergent/apps/server-go/pkg/sdk"
 	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/templatepacks"
+	"github.com/emergent-company/specmcp/internal/config"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func run() error {
 	ctx := context.Background()
 
 	// Load config from environment
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}

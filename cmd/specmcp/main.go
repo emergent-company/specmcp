@@ -1,26 +1,41 @@
 // Command specmcp runs the SpecMCP MCP server.
 //
-// It communicates over stdio using JSON-RPC 2.0 (MCP protocol)
-// and delegates all persistence to the Emergent graph API.
+// It supports two transport modes selected via SPECMCP_TRANSPORT:
+//
+//   - "stdio" (default): Communicates over stdin/stdout using JSON-RPC 2.0.
+//     Used when launched as a subprocess by an MCP client. Requires EMERGENT_TOKEN.
+//
+//   - "http": Runs as a standalone HTTP server implementing the MCP Streamable
+//     HTTP transport (spec 2025-03-26). Clients send their Emergent project token
+//     as the Bearer token in each request. No server-side auth config is needed.
 //
 // Required environment variables:
 //
-//	EMERGENT_TOKEN        - Project-scoped token (emt_*) for Emergent API
+//	EMERGENT_TOKEN        - Project-scoped token (emt_*) for Emergent API (stdio mode only)
 //
 // Optional environment variables:
 //
 //	EMERGENT_URL          - Emergent server URL (default: http://localhost:3002)
+//	SPECMCP_TRANSPORT     - Transport mode: "stdio" or "http" (default: stdio)
+//	SPECMCP_PORT          - HTTP listen port (default: 21452, http mode only)
+//	SPECMCP_HOST          - HTTP listen address (default: 0.0.0.0, http mode only)
+//	SPECMCP_CORS_ORIGINS  - Comma-separated CORS origins (default: *, http mode only)
 //	SPECMCP_LOG_LEVEL     - Log level: debug, info, warn, error (default: info)
 package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/emergent-company/specmcp/internal/config"
 	"github.com/emergent-company/specmcp/internal/content"
@@ -45,13 +60,17 @@ func main() {
 }
 
 func run() error {
-	// Load configuration
-	cfg, err := config.Load()
+	// Parse flags
+	configPath := flag.String("config", "", "path to specmcp.toml config file")
+	flag.Parse()
+
+	// Load configuration (file + env vars)
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Set up structured logging to stderr (stdout is for MCP protocol)
+	// Set up structured logging to stderr (stdout is reserved for MCP protocol in stdio mode)
 	logLevel := parseLogLevel(cfg.Log.Level)
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: logLevel,
@@ -64,6 +83,7 @@ func run() error {
 
 	logger.Info("starting specmcp",
 		"version", version,
+		"transport", cfg.Transport.Mode,
 		"emergent_url", cfg.Emergent.URL,
 	)
 
@@ -74,55 +94,55 @@ func run() error {
 	// Create tool registry and register tools
 	registry := mcp.NewRegistry()
 
-	// Create Emergent client
-	emClient, err := emergent.New(&cfg.Emergent, logger)
-	if err != nil {
-		return fmt.Errorf("creating emergent client: %w", err)
-	}
+	// Create Emergent client factory for per-request clients.
+	// In stdio mode, each request reuses the configured token.
+	// In HTTP mode, each request's token comes from the Authorization header
+	// (injected into context by the HTTP transport layer).
+	emFactory := emergent.NewClientFactory(cfg.Emergent.URL, logger)
 
 	// Register workflow tools
-	specArtifact := workflow.NewSpecArtifact(emClient)
-	registry.Register(workflow.NewSpecNew(emClient))
+	specArtifact := workflow.NewSpecArtifact(emFactory)
+	registry.Register(workflow.NewSpecNew(emFactory))
 	registry.Register(specArtifact)
 	registry.Register(workflow.NewSpecBatchArtifact(specArtifact))
-	registry.Register(workflow.NewSpecArchive(emClient))
-	registry.Register(workflow.NewSpecVerify(emClient))
-	registry.Register(workflow.NewSpecMarkReady(emClient))
-	registry.Register(workflow.NewSpecStatus(emClient))
+	registry.Register(workflow.NewSpecArchive(emFactory))
+	registry.Register(workflow.NewSpecVerify(emFactory))
+	registry.Register(workflow.NewSpecMarkReady(emFactory))
+	registry.Register(workflow.NewSpecStatus(emFactory))
 
 	// Register query tools
-	registry.Register(query.NewListChanges(emClient))
-	registry.Register(query.NewGetChange(emClient))
-	registry.Register(query.NewGetContext(emClient))
-	registry.Register(query.NewGetComponent(emClient))
-	registry.Register(query.NewGetAction(emClient))
-	registry.Register(query.NewGetDataModel(emClient))
-	registry.Register(query.NewGetService(emClient))
-	registry.Register(query.NewGetScenario(emClient))
-	registry.Register(query.NewGetPatterns(emClient))
-	registry.Register(query.NewImpactAnalysis(emClient))
-	registry.Register(query.NewSearch(emClient))
+	registry.Register(query.NewListChanges(emFactory))
+	registry.Register(query.NewGetChange(emFactory))
+	registry.Register(query.NewGetContext(emFactory))
+	registry.Register(query.NewGetComponent(emFactory))
+	registry.Register(query.NewGetAction(emFactory))
+	registry.Register(query.NewGetDataModel(emFactory))
+	registry.Register(query.NewGetService(emFactory))
+	registry.Register(query.NewGetScenario(emFactory))
+	registry.Register(query.NewGetPatterns(emFactory))
+	registry.Register(query.NewImpactAnalysis(emFactory))
+	registry.Register(query.NewSearch(emFactory))
 
 	// Register task management tools
-	registry.Register(tasks.NewGenerateTasks(emClient))
-	registry.Register(tasks.NewGetAvailableTasks(emClient))
-	registry.Register(tasks.NewAssignTask(emClient))
-	registry.Register(tasks.NewCompleteTask(emClient))
-	registry.Register(tasks.NewGetCriticalPath(emClient))
+	registry.Register(tasks.NewGenerateTasks(emFactory))
+	registry.Register(tasks.NewGetAvailableTasks(emFactory))
+	registry.Register(tasks.NewAssignTask(emFactory))
+	registry.Register(tasks.NewCompleteTask(emFactory))
+	registry.Register(tasks.NewGetCriticalPath(emFactory))
 
 	// Register pattern tools
-	registry.Register(patterns.NewSuggestPatterns(emClient))
-	registry.Register(patterns.NewApplyPattern(emClient))
-	registry.Register(patterns.NewSeedPatterns(emClient))
+	registry.Register(patterns.NewSuggestPatterns(emFactory))
+	registry.Register(patterns.NewApplyPattern(emFactory))
+	registry.Register(patterns.NewSeedPatterns(emFactory))
 
 	// Register constitution tools
-	registry.Register(constitution.NewCreateConstitution(emClient))
-	registry.Register(constitution.NewValidateConstitution(emClient))
+	registry.Register(constitution.NewCreateConstitution(emFactory))
+	registry.Register(constitution.NewValidateConstitution(emFactory))
 
 	// Register sync tools
-	registry.Register(gosync.NewSyncStatus(emClient))
-	registry.Register(gosync.NewSync(emClient))
-	registry.Register(gosync.NewGraphSummary(emClient))
+	registry.Register(gosync.NewSyncStatus(emFactory))
+	registry.Register(gosync.NewSync(emFactory))
+	registry.Register(gosync.NewGraphSummary(emFactory))
 
 	// Register prompts
 	registry.RegisterPrompt(&content.GuidePrompt{})
@@ -133,13 +153,68 @@ func run() error {
 	registry.RegisterResource(&content.GuardrailsResource{})
 	registry.RegisterResource(&content.ToolReferenceResource{})
 
-	// Create and run MCP server
+	// Create core MCP server (transport-agnostic)
 	server := mcp.NewServer(registry, mcp.ServerInfo{
 		Name:    cfg.Server.Name,
 		Version: version,
 	}, logger)
 
-	return server.Run(ctx)
+	// Select transport
+	switch cfg.Transport.Mode {
+	case "http":
+		return runHTTP(ctx, server, cfg, logger)
+	default:
+		// Stdio mode: inject the configured token into the context so
+		// ClientFactory.ClientFor can create per-request clients.
+		ctx = emergent.WithToken(ctx, cfg.Emergent.Token)
+		return server.Run(ctx)
+	}
+}
+
+// runHTTP starts the Streamable HTTP transport server.
+func runHTTP(ctx context.Context, server *mcp.Server, cfg *config.Config, logger *slog.Logger) error {
+	httpServer := mcp.NewHTTPServer(
+		server,
+		cfg.Transport.CORSOrigins,
+		logger,
+	)
+
+	addr := net.JoinHostPort(cfg.Transport.Host, cfg.Transport.Port)
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           httpServer.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB
+	}
+
+	// Start HTTP server in a goroutine.
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("HTTP server listening", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("HTTP server error: %w", err)
+		}
+		close(errCh)
+	}()
+
+	// Wait for shutdown signal or server error.
+	select {
+	case <-ctx.Done():
+		logger.Info("shutting down HTTP server")
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("HTTP server shutdown: %w", err)
+		}
+		logger.Info("HTTP server stopped")
+		return nil
+	case err := <-errCh:
+		return err
+	}
 }
 
 func parseLogLevel(s string) slog.Level {

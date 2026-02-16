@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/guards"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // specVerifyParams defines the input for spec_verify.
@@ -18,12 +18,12 @@ type specVerifyParams struct {
 
 // SpecVerify verifies a change across 3 dimensions: completeness, correctness, coherence.
 type SpecVerify struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
 // NewSpecVerify creates a SpecVerify tool.
-func NewSpecVerify(client *emergent.Client) *SpecVerify {
-	return &SpecVerify{client: client}
+func NewSpecVerify(factory *emergent.ClientFactory) *SpecVerify {
+	return &SpecVerify{factory: factory}
 }
 
 func (t *SpecVerify) Name() string { return "spec_verify" }
@@ -59,22 +59,27 @@ func (t *SpecVerify) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.ChangeID == "" {
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
 	// Verify change exists
-	change, err := t.client.GetChange(ctx, p.ChangeID)
+	change, err := client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
 
 	// Build guard context for state
 	gctx := &guards.GuardContext{ChangeID: p.ChangeID}
-	if err := guards.PopulateChangeState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state: %w", err)
 	}
-	if err := guards.PopulateProjectState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateProjectState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating project state: %w", err)
 	}
 
@@ -84,10 +89,10 @@ func (t *SpecVerify) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	issues = append(issues, t.checkCompleteness(ctx, gctx)...)
 
 	// --- Dimension 2: Correctness ---
-	issues = append(issues, t.checkCorrectness(ctx, p.ChangeID, gctx)...)
+	issues = append(issues, t.checkCorrectness(ctx, client, p.ChangeID, gctx)...)
 
 	// --- Dimension 3: Coherence ---
-	issues = append(issues, t.checkCoherence(ctx, p.ChangeID, gctx)...)
+	issues = append(issues, t.checkCoherence(ctx, client, p.ChangeID, gctx)...)
 
 	// Build summary
 	criticalCount := 0
@@ -201,7 +206,7 @@ func (t *SpecVerify) checkCompleteness(_ context.Context, gctx *guards.GuardCont
 }
 
 // checkCorrectness verifies requirements map to implementations.
-func (t *SpecVerify) checkCorrectness(ctx context.Context, changeID string, gctx *guards.GuardContext) []verifyIssue {
+func (t *SpecVerify) checkCorrectness(ctx context.Context, client *emergent.Client, changeID string, gctx *guards.GuardContext) []verifyIssue {
 	var issues []verifyIssue
 
 	if !gctx.HasSpec {
@@ -210,7 +215,7 @@ func (t *SpecVerify) checkCorrectness(ctx context.Context, changeID string, gctx
 
 	// Use ExpandGraph to batch-fetch the entire spec→requirement→scenario tree
 	// and task→implements relationships in a single call
-	expandResp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	expandResp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:   []string{changeID},
 		Direction: "outgoing",
 		MaxDepth:  4, // change→spec→requirement→scenario, change→task→implements
@@ -330,11 +335,11 @@ func (t *SpecVerify) checkCorrectness(ctx context.Context, changeID string, gctx
 }
 
 // checkCoherence verifies design adherence and pattern consistency.
-func (t *SpecVerify) checkCoherence(ctx context.Context, changeID string, gctx *guards.GuardContext) []verifyIssue {
+func (t *SpecVerify) checkCoherence(ctx context.Context, client *emergent.Client, changeID string, gctx *guards.GuardContext) []verifyIssue {
 	var issues []verifyIssue
 
 	// Check if change is governed by a constitution
-	govRels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+	govRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  emergent.RelGovernedBy,
 		SrcID: changeID,
 		Limit: 1,
@@ -351,14 +356,14 @@ func (t *SpecVerify) checkCoherence(ctx context.Context, changeID string, gctx *
 	// Check pattern usage — if patterns exist, the change should use some
 	if gctx.PatternCount > 0 && gctx.HasDesign {
 		// Check if the design or any specs use patterns
-		designRels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+		designRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 			Type:  emergent.RelHasDesign,
 			SrcID: changeID,
 			Limit: 1,
 		})
 		if err == nil && len(designRels) > 0 {
 			designID := designRels[0].DstID
-			patternRels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+			patternRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 				Type:  emergent.RelUsesPattern,
 				SrcID: designID,
 				Limit: 1,

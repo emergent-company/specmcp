@@ -3,50 +3,88 @@ package config
 import (
 	"fmt"
 	"os"
+
+	"github.com/BurntSushi/toml"
 )
 
 // Config holds all configuration for the SpecMCP server.
+// Precedence: environment variables > config file > defaults.
 type Config struct {
-	Emergent EmergentConfig
-	Server   ServerConfig
-	Log      LogConfig
+	Emergent  EmergentConfig  `toml:"emergent"`
+	Server    ServerConfig    `toml:"server"`
+	Transport TransportConfig `toml:"transport"`
+	Log       LogConfig       `toml:"log"`
 }
 
 // EmergentConfig holds Emergent connection details.
 type EmergentConfig struct {
-	URL       string
-	Token     string // Project-scoped token (emt_*) or standalone API key.
-	ProjectID string // Optional: explicit project ID (X-Project-ID header).
+	URL       string `toml:"url"`
+	Token     string `toml:"token"`      // Project-scoped token (emt_*) or standalone API key.
+	ProjectID string `toml:"project_id"` // Optional: explicit project ID (X-Project-ID header).
 }
 
 // ServerConfig holds MCP server metadata.
 type ServerConfig struct {
-	Name    string
-	Version string
+	Name    string `toml:"name"`
+	Version string `toml:"version"`
+}
+
+// TransportConfig holds transport-related settings.
+type TransportConfig struct {
+	// Mode selects the transport: "stdio" (default) or "http".
+	Mode string `toml:"mode"`
+	// Port is the HTTP listen port (default: 21452). Only used when Mode is "http".
+	Port string `toml:"port"`
+	// Host is the HTTP listen address (default: "0.0.0.0"). Only used when Mode is "http".
+	Host string `toml:"host"`
+	// CORSOrigins is a comma-separated list of allowed CORS origins (default: "*").
+	CORSOrigins string `toml:"cors_origins"`
 }
 
 // LogConfig holds logging configuration.
 type LogConfig struct {
-	Level string // debug, info, warn, error
+	Level string `toml:"level"` // debug, info, warn, error
 }
 
-// Load creates a Config by reading environment variables with defaults.
-// Precedence: environment variables > defaults.
-func Load() (*Config, error) {
+// Load creates a Config by reading from a TOML config file and environment
+// variables. Precedence: environment variables > config file > defaults.
+//
+// Config file search order (first found wins):
+//  1. Path passed via configPath parameter (from --config flag)
+//  2. SPECMCP_CONFIG environment variable
+//  3. ./specmcp.toml (current directory)
+//  4. ~/.config/specmcp/specmcp.toml (XDG-style)
+//
+// All fields are optional in the config file. Environment variables always
+// override file values.
+func Load(configPath string) (*Config, error) {
+	// Start with defaults
 	cfg := &Config{
 		Emergent: EmergentConfig{
-			URL:       envOr("EMERGENT_URL", "http://localhost:3002"),
-			Token:     envOr("EMERGENT_TOKEN", os.Getenv("EMERGENT_API_KEY")),
-			ProjectID: os.Getenv("EMERGENT_PROJECT_ID"),
+			URL: "http://localhost:3002",
 		},
 		Server: ServerConfig{
 			Name:    "specmcp",
 			Version: "0.1.0",
 		},
+		Transport: TransportConfig{
+			Mode:        "stdio",
+			Port:        "21452",
+			Host:        "0.0.0.0",
+			CORSOrigins: "*",
+		},
 		Log: LogConfig{
-			Level: envOr("SPECMCP_LOG_LEVEL", "info"),
+			Level: "info",
 		},
 	}
+
+	// Layer config file values on top of defaults
+	if err := cfg.loadFile(configPath); err != nil {
+		return nil, err
+	}
+
+	// Layer environment variables on top (always win)
+	cfg.applyEnv()
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -55,17 +93,90 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks that required fields are present.
-func (c *Config) Validate() error {
-	if c.Emergent.Token == "" {
-		return fmt.Errorf("missing required environment variable: EMERGENT_TOKEN or EMERGENT_API_KEY")
+// loadFile finds and parses the TOML config file. If no file is found,
+// this is a no-op (config file is optional).
+func (c *Config) loadFile(configPath string) error {
+	path := resolveConfigPath(configPath)
+	if path == "" {
+		return nil // no config file found; rely on defaults + env
 	}
+
+	if _, err := toml.DecodeFile(path, c); err != nil {
+		return fmt.Errorf("reading config file %s: %w", path, err)
+	}
+
 	return nil
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// resolveConfigPath determines which config file to use. Returns empty string
+// if no config file is found (config file is optional).
+func resolveConfigPath(explicit string) string {
+	// 1. Explicit path from --config flag
+	if explicit != "" {
+		return explicit // caller wants this file; let DecodeFile report if missing
 	}
-	return fallback
+
+	// 2. SPECMCP_CONFIG env var
+	if p := os.Getenv("SPECMCP_CONFIG"); p != "" {
+		return p
+	}
+
+	// 3. ./specmcp.toml in current directory
+	if _, err := os.Stat("specmcp.toml"); err == nil {
+		return "specmcp.toml"
+	}
+
+	// 4. ~/.config/specmcp/specmcp.toml
+	if home, err := os.UserHomeDir(); err == nil {
+		p := home + "/.config/specmcp/specmcp.toml"
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	return ""
+}
+
+// applyEnv overlays environment variables on top of existing config values.
+// An env var only takes effect if it is non-empty.
+func (c *Config) applyEnv() {
+	// Emergent
+	envOverride("EMERGENT_URL", &c.Emergent.URL)
+	envOverride("EMERGENT_TOKEN", &c.Emergent.Token)
+	envOverride("EMERGENT_API_KEY", &c.Emergent.Token) // legacy alias
+	envOverride("EMERGENT_PROJECT_ID", &c.Emergent.ProjectID)
+
+	// Transport
+	envOverride("SPECMCP_TRANSPORT", &c.Transport.Mode)
+	envOverride("SPECMCP_PORT", &c.Transport.Port)
+	envOverride("SPECMCP_HOST", &c.Transport.Host)
+	envOverride("SPECMCP_CORS_ORIGINS", &c.Transport.CORSOrigins)
+
+	// Logging
+	envOverride("SPECMCP_LOG_LEVEL", &c.Log.Level)
+}
+
+// Validate checks that required fields are present.
+func (c *Config) Validate() error {
+	switch c.Transport.Mode {
+	case "stdio":
+		// Stdio mode requires a token because there's no HTTP auth layer.
+		if c.Emergent.Token == "" {
+			return fmt.Errorf("emergent token is required for stdio mode: set emergent.token in config file, or EMERGENT_TOKEN env var")
+		}
+	case "http":
+		// HTTP mode gets the token from each request's Authorization header.
+		// No server-side token is needed.
+	default:
+		return fmt.Errorf("invalid transport mode: %q (must be \"stdio\" or \"http\")", c.Transport.Mode)
+	}
+
+	return nil
+}
+
+// envOverride sets *dst to the value of the named env var, if it is non-empty.
+func envOverride(key string, dst *string) {
+	if v := os.Getenv(key); v != "" {
+		*dst = v
+	}
 }

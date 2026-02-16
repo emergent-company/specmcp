@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_get_context ---
@@ -22,11 +22,11 @@ type getContextParams struct {
 
 // GetContext retrieves a Context entity and its relationships.
 type GetContext struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetContext(client *emergent.Client) *GetContext {
-	return &GetContext{client: client}
+func NewGetContext(factory *emergent.ClientFactory) *GetContext {
+	return &GetContext{factory: factory}
 }
 
 func (t *GetContext) Name() string { return "spec_get_context" }
@@ -49,13 +49,18 @@ func (t *GetContext) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeContext, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeContext, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
 	// Expand graph to get related entities
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelUsesComponent,
 		emergent.RelAvailableIn,
 		emergent.RelNavigatesTo,
@@ -78,11 +83,11 @@ type getComponentParams struct {
 }
 
 type GetComponent struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetComponent(client *emergent.Client) *GetComponent {
-	return &GetComponent{client: client}
+func NewGetComponent(factory *emergent.ClientFactory) *GetComponent {
+	return &GetComponent{factory: factory}
 }
 
 func (t *GetComponent) Name() string { return "spec_get_component" }
@@ -105,12 +110,17 @@ func (t *GetComponent) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeUIComponent, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeUIComponent, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelComposedOf,
 		emergent.RelUsesComponent,
 		emergent.RelUsesPattern,
@@ -131,11 +141,11 @@ type getActionParams struct {
 }
 
 type GetAction struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetAction(client *emergent.Client) *GetAction {
-	return &GetAction{client: client}
+func NewGetAction(factory *emergent.ClientFactory) *GetAction {
+	return &GetAction{factory: factory}
 }
 
 func (t *GetAction) Name() string { return "spec_get_action" }
@@ -158,12 +168,17 @@ func (t *GetAction) Execute(ctx context.Context, params json.RawMessage) (*mcp.T
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeAction, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeAction, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelAvailableIn,
 		emergent.RelNavigatesTo,
 		emergent.RelUsesPattern,
@@ -185,11 +200,11 @@ type getDataModelParams struct {
 }
 
 type GetDataModel struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetDataModel(client *emergent.Client) *GetDataModel {
-	return &GetDataModel{client: client}
+func NewGetDataModel(factory *emergent.ClientFactory) *GetDataModel {
+	return &GetDataModel{factory: factory}
 }
 
 func (t *GetDataModel) Name() string { return "spec_get_data_model" }
@@ -212,12 +227,17 @@ func (t *GetDataModel) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeDataModel, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeDataModel, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelBelongsToService,
 		emergent.RelUsesModel,
 		emergent.RelUsesPattern,
@@ -237,11 +257,11 @@ type getServiceParams struct {
 }
 
 type GetService struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetService(client *emergent.Client) *GetService {
-	return &GetService{client: client}
+func NewGetService(factory *emergent.ClientFactory) *GetService {
+	return &GetService{factory: factory}
 }
 
 func (t *GetService) Name() string { return "spec_get_service" }
@@ -264,12 +284,17 @@ func (t *GetService) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeService, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeService, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelExposesAPI,
 		emergent.RelProvidesModel,
 		emergent.RelBelongsToService,
@@ -290,11 +315,11 @@ type getScenarioParams struct {
 }
 
 type GetScenario struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetScenario(client *emergent.Client) *GetScenario {
-	return &GetScenario{client: client}
+func NewGetScenario(factory *emergent.ClientFactory) *GetScenario {
+	return &GetScenario{factory: factory}
 }
 
 func (t *GetScenario) Name() string { return "spec_get_scenario" }
@@ -317,12 +342,17 @@ func (t *GetScenario) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeScenario, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeScenario, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelHasStep,
 		emergent.RelExecutedBy,
 		emergent.RelTestedBy,
@@ -345,11 +375,11 @@ type getPatternsParams struct {
 }
 
 type GetPatterns struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetPatterns(client *emergent.Client) *GetPatterns {
-	return &GetPatterns{client: client}
+func NewGetPatterns(factory *emergent.ClientFactory) *GetPatterns {
+	return &GetPatterns{factory: factory}
 }
 
 func (t *GetPatterns) Name() string { return "spec_get_patterns" }
@@ -385,6 +415,11 @@ func (t *GetPatterns) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	limit := p.Limit
 	if limit <= 0 {
 		limit = 50
@@ -411,7 +446,7 @@ func (t *GetPatterns) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		opts.PropertyFilters = filters
 	}
 
-	objs, err := t.client.ListObjects(ctx, opts)
+	objs, err := client.ListObjects(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("listing patterns: %w", err)
 	}
@@ -444,11 +479,11 @@ type impactAnalysisParams struct {
 }
 
 type ImpactAnalysis struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewImpactAnalysis(client *emergent.Client) *ImpactAnalysis {
-	return &ImpactAnalysis{client: client}
+func NewImpactAnalysis(factory *emergent.ClientFactory) *ImpactAnalysis {
+	return &ImpactAnalysis{factory: factory}
 }
 
 func (t *ImpactAnalysis) Name() string { return "spec_impact_analysis" }
@@ -494,6 +529,11 @@ func (t *ImpactAnalysis) Execute(ctx context.Context, params json.RawMessage) (*
 		return mcp.ErrorResult("entity_id is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	maxDepth := p.MaxDepth
 	if maxDepth <= 0 {
 		maxDepth = 3
@@ -504,13 +544,13 @@ func (t *ImpactAnalysis) Execute(ctx context.Context, params json.RawMessage) (*
 	}
 
 	// Get the source entity
-	root, err := t.client.GetObject(ctx, p.EntityID)
+	root, err := client.GetObject(ctx, p.EntityID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("entity not found: %v", err)), nil
 	}
 
 	// Expand graph from this entity
-	expanded, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	expanded, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:                       []string{p.EntityID},
 		Direction:                     direction,
 		MaxDepth:                      maxDepth,
@@ -591,11 +631,11 @@ type listChangesParams struct {
 }
 
 type ListChanges struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewListChanges(client *emergent.Client) *ListChanges {
-	return &ListChanges{client: client}
+func NewListChanges(factory *emergent.ClientFactory) *ListChanges {
+	return &ListChanges{factory: factory}
 }
 
 func (t *ListChanges) Name() string { return "spec_list_changes" }
@@ -625,7 +665,12 @@ func (t *ListChanges) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	changes, err := t.client.ListChanges(ctx, p.Status)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	changes, err := client.ListChanges(ctx, p.Status)
 	if err != nil {
 		return nil, fmt.Errorf("listing changes: %w", err)
 	}
@@ -654,11 +699,11 @@ type getChangeParams struct {
 }
 
 type GetChange struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewGetChange(client *emergent.Client) *GetChange {
-	return &GetChange{client: client}
+func NewGetChange(factory *emergent.ClientFactory) *GetChange {
+	return &GetChange{factory: factory}
 }
 
 func (t *GetChange) Name() string { return "spec_get_change" }
@@ -681,13 +726,18 @@ func (t *GetChange) Execute(ctx context.Context, params json.RawMessage) (*mcp.T
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
-	obj, err := resolveEntity(ctx, t.client, emergent.TypeChange, p.ID, p.Name)
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	obj, err := resolveEntity(ctx, client, emergent.TypeChange, p.ID, p.Name)
 	if err != nil {
 		return mcp.ErrorResult(err.Error()), nil
 	}
 
 	// Expand to get all direct artifacts and change-tracked entities
-	expanded, err := t.client.GetEntityWithRelationships(ctx, obj.ID, []string{
+	expanded, err := client.GetEntityWithRelationships(ctx, obj.ID, []string{
 		emergent.RelHasProposal,
 		emergent.RelHasSpec,
 		emergent.RelHasDesign,

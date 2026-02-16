@@ -1,0 +1,49 @@
+[Unit]
+Description=SpecMCP - Spec-driven development MCP server
+Documentation=https://github.com/emergent-company/specmcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/specmcp
+
+# Environment: only the Emergent URL is required server-side.
+# Clients send their own Emergent token as the Bearer header.
+Environment=SPECMCP_TRANSPORT=http
+Environment=SPECMCP_PORT=21452
+Environment=SPECMCP_HOST=0.0.0.0
+Environment=SPECMCP_LOG_LEVEL=info
+
+# Override defaults via drop-in or environment file:
+#   systemctl edit specmcp
+# or:
+#   echo 'EMERGENT_URL=http://your-emergent:3002' > /etc/specmcp.env
+EnvironmentFile=-/etc/specmcp.env
+
+# Security hardening
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Logging goes to journal (slog writes to stderr)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=specmcp
+
+[Install]
+WantedBy=multi-user.target

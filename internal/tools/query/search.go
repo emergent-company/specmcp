@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // --- spec_search ---
@@ -43,11 +43,11 @@ type searchParams struct {
 // Search performs full-text search across all graph entities.
 // Uses Emergent FTS when available; falls back to client-side property matching.
 type Search struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewSearch(client *emergent.Client) *Search {
-	return &Search{client: client}
+func NewSearch(factory *emergent.ClientFactory) *Search {
+	return &Search{factory: factory}
 }
 
 func (t *Search) Name() string { return "spec_search" }
@@ -92,6 +92,11 @@ func (t *Search) Execute(ctx context.Context, params json.RawMessage) (*mcp.Tool
 		return mcp.ErrorResult("query is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	limit := p.Limit
 	if limit <= 0 {
 		limit = 20
@@ -101,7 +106,7 @@ func (t *Search) Execute(ctx context.Context, params json.RawMessage) (*mcp.Tool
 	}
 
 	// Try FTS first
-	resp, err := t.client.FTSSearch(ctx, &graph.FTSSearchOptions{
+	resp, err := client.FTSSearch(ctx, &graph.FTSSearchOptions{
 		Query:  p.Query,
 		Types:  p.Types,
 		Labels: p.Labels,
@@ -124,12 +129,12 @@ func (t *Search) Execute(ctx context.Context, params json.RawMessage) (*mcp.Tool
 	}
 
 	// FTS returned empty or failed — fall back to client-side search
-	return t.fallbackSearch(ctx, p.Query, p.Types, p.Labels, limit)
+	return t.fallbackSearch(ctx, client, p.Query, p.Types, p.Labels, limit)
 }
 
 // fallbackSearch lists objects by type and filters by checking if the query
 // appears in the key or any string property value (case-insensitive).
-func (t *Search) fallbackSearch(ctx context.Context, queryStr string, types, labels []string, limit int) (*mcp.ToolsCallResult, error) {
+func (t *Search) fallbackSearch(ctx context.Context, client *emergent.Client, queryStr string, types, labels []string, limit int) (*mcp.ToolsCallResult, error) {
 	if len(types) == 0 {
 		types = defaultSearchTypes
 	}
@@ -160,14 +165,14 @@ func (t *Search) fallbackSearch(ctx context.Context, queryStr string, types, lab
 			usedNameFilter = true
 		}
 
-		objs, err := t.client.ListObjects(ctx, opts)
+		objs, err := client.ListObjects(ctx, opts)
 		if err != nil {
 			// If property filter fails (some backends don't support 'contains'),
 			// retry without it — this unfiltered fetch covers all fields,
 			// so no second fetch is needed
 			opts.PropertyFilters = nil
 			usedNameFilter = false
-			objs, err = t.client.ListObjects(ctx, opts)
+			objs, err = client.ListObjects(ctx, opts)
 			if err != nil {
 				continue // skip this type on error
 			}
@@ -186,7 +191,7 @@ func (t *Search) fallbackSearch(ctx context.Context, queryStr string, types, lab
 		// still need more results to reach the limit
 		if usedNameFilter && len(results) < limit {
 			opts.PropertyFilters = nil
-			objs2, err := t.client.ListObjects(ctx, opts)
+			objs2, err := client.ListObjects(ctx, opts)
 			if err == nil {
 				seen := make(map[string]bool, len(results))
 				for _, r := range results {

@@ -1,0 +1,26 @@
+# Maintainer: Emergent <dev@emergent.sh>
+pkgname=specmcp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Spec-driven development MCP server backed by the Emergent knowledge graph'
+arch=('x86_64')
+url='https://github.com/emergent-company/specmcp'
+license=('MIT')
+backup=('etc/specmcp.env')
+source=(
+  "specmcp"
+  "specmcp.service"
+  "specmcp.env"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  # Binary
+  install -Dm755 "${srcdir}/specmcp" "${pkgdir}/usr/bin/specmcp"
+
+  # Systemd unit
+  install -Dm644 "${srcdir}/specmcp.service" "${pkgdir}/usr/lib/systemd/system/specmcp.service"
+
+  # Environment file
+  install -Dm600 "${srcdir}/specmcp.env" "${pkgdir}/etc/specmcp.env"
+}

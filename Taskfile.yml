@@ -1,0 +1,69 @@
+version: '3'
+
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  BINARY: specmcp
+  OUTDIR: dist
+
+tasks:
+  default:
+    desc: Build the binary
+    aliases: [build]
+    cmds:
+      - mkdir -p {{.OUTDIR}}
+      - echo "Building {{.BINARY}} {{.VERSION}}..."
+      - go build -ldflags "-X main.Version={{.VERSION}}" -o {{.OUTDIR}}/{{.BINARY}} ./cmd/specmcp/
+    sources:
+      - ./**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.OUTDIR}}/{{.BINARY}}"
+
+  run:
+    desc: Build and run the binary
+    deps: [build]
+    cmds:
+      - "{{.OUTDIR}}/{{.BINARY}}"
+
+  install:
+    desc: Install the binary via go install
+    cmds:
+      - go install -ldflags "-X main.Version={{.VERSION}}" ./cmd/specmcp/
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  seed:
+    desc: Register template pack with Emergent
+    cmds:
+      - echo "Seeding template pack..."
+      - go run ./scripts/seed.go
+
+  fmt:
+    desc: Format Go source files
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Tidy Go module dependencies
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.OUTDIR}}
+
+  docker:
+    desc: Build Docker image
+    cmds:
+      - docker build -t specmcp .

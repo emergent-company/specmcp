@@ -25,7 +25,7 @@ SpecMCP provides a spec-anchored development workflow where specifications evolv
 ```bash
 git clone https://github.com/emergent-company/specmcp.git
 cd specmcp
-make build
+task build
 ```
 
 The binary will be output to `dist/specmcp`.
@@ -38,16 +38,42 @@ go install github.com/emergent-company/specmcp/cmd/specmcp@latest
 
 ## Configuration
 
-SpecMCP is configured via environment variables:
+SpecMCP uses layered configuration: **environment variables > config file > defaults**.
+
+### Config file
+
+Copy the example and edit:
+
+```bash
+cp specmcp.example.toml specmcp.toml
+```
+
+Config file search order (first found wins):
+1. `--config` flag (e.g. `specmcp --config /path/to/specmcp.toml`)
+2. `SPECMCP_CONFIG` env var
+3. `./specmcp.toml` (current directory)
+4. `~/.config/specmcp/specmcp.toml`
+
+The config file is TOML format and entirely optional — env vars alone are sufficient.
+
+### Environment variables
+
+Environment variables always override config file values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `EMERGENT_TOKEN` | Yes | - | Project-scoped token (`emt_*`) or API key |
+| `EMERGENT_TOKEN` | stdio only | - | Project-scoped token (`emt_*`) or API key. Required for stdio mode; not needed for HTTP mode (clients send their own token). |
 | `EMERGENT_URL` | No | `http://localhost:3002` | Emergent server URL |
 | `EMERGENT_PROJECT_ID` | No | - | Required when using standalone API keys |
-| `SPECMCP_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `SPECMCP_TRANSPORT` | No | `stdio` | Transport mode: `stdio` or `http` |
+| `SPECMCP_PORT` | No | `21452` | HTTP listen port (http mode only) |
+| `SPECMCP_HOST` | No | `0.0.0.0` | HTTP listen address (http mode only) |
+| `SPECMCP_CORS_ORIGINS` | No | `*` | Comma-separated CORS origins (http mode only) |
+| `SPECMCP_LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
 
 ## Usage
+
+### Stdio mode (default)
 
 SpecMCP runs as a stdio MCP server. Add it to your MCP client configuration:
 
@@ -71,9 +97,30 @@ Or run directly:
 EMERGENT_TOKEN=emt_... ./dist/specmcp
 ```
 
+### HTTP mode
+
+Run as a standalone HTTP server. Clients send their own Emergent token as the Bearer header — no server-side token is needed:
+
+```bash
+EMERGENT_URL=http://your-emergent:3002 \
+SPECMCP_TRANSPORT=http \
+./dist/specmcp
+```
+
+Clients connect via `POST /mcp` with `Authorization: Bearer <emergent_token>`. The token is the client's own Emergent project token (`emt_*`).
+
+Health check: `GET /health`
+
+### Docker
+
+```bash
+docker build -t specmcp .
+docker run -p 21452:21452 -e EMERGENT_URL=http://your-emergent:3002 specmcp
+```
+
 ## Capabilities
 
-### Tools (27)
+### Tools (31)
 
 - **Workflow** (7): `spec_new`, `spec_artifact`, `spec_batch_artifact`, `spec_archive`, `spec_verify`, `spec_mark_ready`, `spec_status`
 - **Query** (11): `list_changes`, `get_change`, `get_context`, `get_component`, `get_action`, `get_data_model`, `get_service`, `get_scenario`, `get_patterns`, `impact_analysis`, `search`
@@ -98,18 +145,18 @@ EMERGENT_TOKEN=emt_... ./dist/specmcp
 To register the SpecMCP template pack with your Emergent project:
 
 ```bash
-EMERGENT_TOKEN=emt_... make seed
+EMERGENT_TOKEN=emt_... task seed
 ```
 
 ## Development
 
 ```bash
-make build    # Build binary
-make test     # Run tests
-make fmt      # Format code
-make vet      # Run go vet
-make tidy     # Tidy dependencies
-make clean    # Remove build artifacts
+task build    # Build binary
+task test     # Run tests
+task fmt      # Format code
+task vet      # Run go vet
+task tidy     # Tidy dependencies
+task clean    # Remove build artifacts
 ```
 
 ## License

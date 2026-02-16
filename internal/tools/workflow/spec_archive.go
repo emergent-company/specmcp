@@ -18,15 +18,15 @@ type specArchiveParams struct {
 
 // SpecArchive archives a completed change.
 type SpecArchive struct {
-	client *emergent.Client
-	runner *guards.Runner
+	factory *emergent.ClientFactory
+	runner  *guards.Runner
 }
 
 // NewSpecArchive creates a SpecArchive tool.
-func NewSpecArchive(client *emergent.Client) *SpecArchive {
+func NewSpecArchive(factory *emergent.ClientFactory) *SpecArchive {
 	return &SpecArchive{
-		client: client,
-		runner: guards.NewRunner(),
+		factory: factory,
+		runner:  guards.NewRunner(),
 	}
 }
 
@@ -59,12 +59,17 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.ChangeID == "" {
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
 	// Get the change
-	change, err := t.client.GetChange(ctx, p.ChangeID)
+	change, err := client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
@@ -78,7 +83,7 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		ChangeID: p.ChangeID,
 		Force:    p.Force,
 	}
-	if err := guards.PopulateChangeState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state for guards: %w", err)
 	}
 
@@ -89,7 +94,7 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 	}
 
 	// Archive the change
-	_, err = t.client.UpdateObject(ctx, p.ChangeID, map[string]any{
+	_, err = client.UpdateObject(ctx, p.ChangeID, map[string]any{
 		"status": emergent.StatusArchived,
 	}, nil)
 	if err != nil {

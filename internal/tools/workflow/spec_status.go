@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/guards"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // specStatusParams defines the input for spec_status.
@@ -19,12 +19,12 @@ type specStatusParams struct {
 // SpecStatus reports the current workflow position of a change, including
 // artifact readiness summary and prioritized next steps.
 type SpecStatus struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
 // NewSpecStatus creates a SpecStatus tool.
-func NewSpecStatus(client *emergent.Client) *SpecStatus {
-	return &SpecStatus{client: client}
+func NewSpecStatus(factory *emergent.ClientFactory) *SpecStatus {
+	return &SpecStatus{factory: factory}
 }
 
 func (t *SpecStatus) Name() string { return "spec_status" }
@@ -60,24 +60,29 @@ func (t *SpecStatus) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.ChangeID == "" {
 		return mcp.ErrorResult("change_id is required"), nil
 	}
 
 	// Verify change exists
-	change, err := t.client.GetChange(ctx, p.ChangeID)
+	change, err := client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
 
 	// Build guard context for state
 	gctx := &guards.GuardContext{ChangeID: p.ChangeID}
-	if err := guards.PopulateChangeState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state: %w", err)
 	}
 
 	// Determine current stage and build per-artifact detail
-	specDetail := t.buildSpecDetail(ctx, p.ChangeID, gctx)
+	specDetail := t.buildSpecDetail(ctx, client, p.ChangeID, gctx)
 
 	// Build artifact summaries
 	artifacts := map[string]artifactSummary{
@@ -205,7 +210,7 @@ func (t *SpecStatus) buildNextSteps(gctx *guards.GuardContext) []string {
 
 // buildSpecDetail returns a human-readable summary of spec readiness,
 // including counts of unready requirements and scenarios.
-func (t *SpecStatus) buildSpecDetail(ctx context.Context, changeID string, gctx *guards.GuardContext) string {
+func (t *SpecStatus) buildSpecDetail(ctx context.Context, client *emergent.Client, changeID string, gctx *guards.GuardContext) string {
 	if !gctx.HasSpec {
 		return "no specs"
 	}
@@ -214,7 +219,7 @@ func (t *SpecStatus) buildSpecDetail(ctx context.Context, changeID string, gctx 
 	}
 
 	// Use ExpandGraph to get detailed readiness breakdown
-	resp, err := t.client.ExpandGraph(ctx, &graph.GraphExpandRequest{
+	resp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
 		RootIDs:   []string{changeID},
 		Direction: "outgoing",
 		MaxDepth:  4,

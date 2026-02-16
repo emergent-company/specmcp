@@ -27,11 +27,11 @@ type createParams struct {
 // This is a standalone tool that does not require a Change — it is meant
 // to bootstrap the project before any changes can be created.
 type CreateConstitution struct {
-	client *emergent.Client
+	factory *emergent.ClientFactory
 }
 
-func NewCreateConstitution(client *emergent.Client) *CreateConstitution {
-	return &CreateConstitution{client: client}
+func NewCreateConstitution(factory *emergent.ClientFactory) *CreateConstitution {
+	return &CreateConstitution{factory: factory}
 }
 
 func (t *CreateConstitution) Name() string { return "spec_create_constitution" }
@@ -99,6 +99,11 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 		return mcp.ErrorResult("version is required"), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	// Build properties
 	props := map[string]any{
 		"name":    p.Name,
@@ -125,7 +130,7 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 
 	// Upsert so re-running updates the existing constitution
 	key := p.Name
-	obj, err := t.client.UpsertObject(ctx, emergent.TypeConstitution, &key, props, p.Tags)
+	obj, err := client.UpsertObject(ctx, emergent.TypeConstitution, &key, props, p.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("creating constitution: %w", err)
 	}
@@ -133,30 +138,30 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 	// Link patterns if specified (requires_pattern and forbids_pattern)
 	relCount := 0
 	for _, patternName := range p.PatternsRequired {
-		pattern, err := t.client.FindByTypeAndKey(ctx, emergent.TypePattern, patternName)
+		pattern, err := client.FindByTypeAndKey(ctx, emergent.TypePattern, patternName)
 		if err != nil || pattern == nil {
 			continue // skip patterns that don't exist yet
 		}
 		// Check if relationship already exists
-		exists, err := t.client.HasRelationship(ctx, emergent.RelRequiresPattern, obj.ID, pattern.ID)
+		exists, err := client.HasRelationship(ctx, emergent.RelRequiresPattern, obj.ID, pattern.ID)
 		if err != nil || exists {
 			continue
 		}
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelRequiresPattern, obj.ID, pattern.ID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelRequiresPattern, obj.ID, pattern.ID, nil); err != nil {
 			return nil, fmt.Errorf("creating requires_pattern relationship: %w", err)
 		}
 		relCount++
 	}
 	for _, patternName := range p.PatternsForbidden {
-		pattern, err := t.client.FindByTypeAndKey(ctx, emergent.TypePattern, patternName)
+		pattern, err := client.FindByTypeAndKey(ctx, emergent.TypePattern, patternName)
 		if err != nil || pattern == nil {
 			continue
 		}
-		exists, err := t.client.HasRelationship(ctx, emergent.RelForbidsPattern, obj.ID, pattern.ID)
+		exists, err := client.HasRelationship(ctx, emergent.RelForbidsPattern, obj.ID, pattern.ID)
 		if err != nil || exists {
 			continue
 		}
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelForbidsPattern, obj.ID, pattern.ID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelForbidsPattern, obj.ID, pattern.ID, nil); err != nil {
 			return nil, fmt.Errorf("creating forbids_pattern relationship: %w", err)
 		}
 		relCount++

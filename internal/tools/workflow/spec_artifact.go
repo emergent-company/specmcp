@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/guards"
 	"github.com/emergent-company/specmcp/internal/mcp"
-	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
 )
 
 // specArtifactParams defines the input for spec_artifact.
@@ -20,15 +20,15 @@ type specArtifactParams struct {
 
 // SpecArtifact adds artifacts to a change.
 type SpecArtifact struct {
-	client *emergent.Client
-	runner *guards.Runner
+	factory *emergent.ClientFactory
+	runner  *guards.Runner
 }
 
 // NewSpecArtifact creates a SpecArtifact tool.
-func NewSpecArtifact(client *emergent.Client) *SpecArtifact {
+func NewSpecArtifact(factory *emergent.ClientFactory) *SpecArtifact {
 	return &SpecArtifact{
-		client: client,
-		runner: guards.NewRunner(),
+		factory: factory,
+		runner:  guards.NewRunner(),
 	}
 }
 
@@ -66,6 +66,11 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("invalid parameters: %v", err)), nil
 	}
 
+	client, err := t.factory.ClientFor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
 	if p.ChangeID == "" {
 		return mcp.ErrorResult("change_id is required"), nil
 	}
@@ -77,7 +82,7 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 	}
 
 	// Verify change exists and is active
-	change, err := t.client.GetChange(ctx, p.ChangeID)
+	change, err := client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
@@ -90,7 +95,7 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		ChangeID:     p.ChangeID,
 		ArtifactType: p.ArtifactType,
 	}
-	if err := guards.PopulateChangeState(ctx, t.client, gctx); err != nil {
+	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state for guards: %w", err)
 	}
 
@@ -102,50 +107,50 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 	// Dispatch to type-specific handler
 	switch p.ArtifactType {
 	case "proposal":
-		return t.addProposal(ctx, p.ChangeID, p.Content)
+		return t.addProposal(ctx, client, p.ChangeID, p.Content)
 	case "spec":
-		return t.addSpec(ctx, p.ChangeID, p.Content)
+		return t.addSpec(ctx, client, p.ChangeID, p.Content)
 	case "design":
-		return t.addDesign(ctx, p.ChangeID, p.Content)
+		return t.addDesign(ctx, client, p.ChangeID, p.Content)
 	case "task":
-		return t.addTask(ctx, p.ChangeID, p.Content)
+		return t.addTask(ctx, client, p.ChangeID, p.Content)
 	case "requirement":
-		return t.addRequirement(ctx, p.Content)
+		return t.addRequirement(ctx, client, p.Content)
 	case "scenario":
-		return t.addScenario(ctx, p.Content)
+		return t.addScenario(ctx, client, p.Content)
 	case "scenario_step":
-		return t.addScenarioStep(ctx, p.Content)
+		return t.addScenarioStep(ctx, client, p.Content)
 	case "actor":
-		return t.addGenericEntity(ctx, emergent.TypeActor, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeActor, p.Content, nil, p.ChangeID)
 	case "coding_agent":
-		return t.addGenericEntity(ctx, emergent.TypeCodingAgent, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeCodingAgent, p.Content, nil, p.ChangeID)
 	case "pattern":
-		return t.addGenericEntity(ctx, emergent.TypePattern, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypePattern, p.Content, nil, p.ChangeID)
 	case "test_case":
-		return t.addTestCase(ctx, p.Content)
+		return t.addTestCase(ctx, client, p.Content)
 	case "api_contract":
-		return t.addGenericEntity(ctx, emergent.TypeAPIContract, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeAPIContract, p.Content, nil, p.ChangeID)
 	case "context":
-		return t.addGenericEntity(ctx, emergent.TypeContext, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeContext, p.Content, nil, p.ChangeID)
 	case "ui_component":
-		return t.addGenericEntity(ctx, emergent.TypeUIComponent, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeUIComponent, p.Content, nil, p.ChangeID)
 	case "action":
-		return t.addGenericEntity(ctx, emergent.TypeAction, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeAction, p.Content, nil, p.ChangeID)
 	case "data_model":
-		return t.addGenericEntity(ctx, emergent.TypeDataModel, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeDataModel, p.Content, nil, p.ChangeID)
 	case "service":
-		return t.addGenericEntity(ctx, emergent.TypeService, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeService, p.Content, nil, p.ChangeID)
 	case "constitution":
-		return t.addConstitution(ctx, p.ChangeID, p.Content)
+		return t.addConstitution(ctx, client, p.ChangeID, p.Content)
 	default:
 		return mcp.ErrorResult(fmt.Sprintf("unsupported artifact type: %s", p.ArtifactType)), nil
 	}
 }
 
 // addProposal creates a Proposal for the change (1:1, rejects duplicates).
-func (t *SpecArtifact) addProposal(ctx context.Context, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addProposal(ctx context.Context, client *emergent.Client, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
 	// Check for existing proposal
-	has, err := t.hasRelType(ctx, changeID, emergent.RelHasProposal)
+	has, err := t.hasRelType(ctx, client, changeID, emergent.RelHasProposal)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +158,7 @@ func (t *SpecArtifact) addProposal(ctx context.Context, changeID string, content
 		return mcp.ErrorResult("Change already has a Proposal (1:1 relationship)"), nil
 	}
 
-	proposal, err := t.client.CreateProposal(ctx, changeID, &emergent.Proposal{
+	proposal, err := client.CreateProposal(ctx, changeID, &emergent.Proposal{
 		Intent: getString(content, "intent"),
 		Scope:  getString(content, "scope"),
 		Impact: getString(content, "impact"),
@@ -171,8 +176,8 @@ func (t *SpecArtifact) addProposal(ctx context.Context, changeID string, content
 }
 
 // addSpec creates a Spec with optional Requirements and Scenarios.
-func (t *SpecArtifact) addSpec(ctx context.Context, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
-	spec, err := t.client.CreateSpec(ctx, changeID, &emergent.Spec{
+func (t *SpecArtifact) addSpec(ctx context.Context, client *emergent.Client, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
+	spec, err := client.CreateSpec(ctx, changeID, &emergent.Spec{
 		Name:      getString(content, "name"),
 		Domain:    getString(content, "domain"),
 		Purpose:   getString(content, "purpose"),
@@ -198,7 +203,7 @@ func (t *SpecArtifact) addSpec(ctx context.Context, changeID string, content map
 			if !ok {
 				continue
 			}
-			req, err := t.client.CreateRequirement(ctx, spec.ID, &emergent.Requirement{
+			req, err := client.CreateRequirement(ctx, spec.ID, &emergent.Requirement{
 				Name:        getString(reqMap, "name"),
 				Description: getString(reqMap, "description"),
 				Strength:    getString(reqMap, "strength"),
@@ -222,7 +227,7 @@ func (t *SpecArtifact) addSpec(ctx context.Context, changeID string, content map
 					if !ok {
 						continue
 					}
-					scen, err := t.client.CreateScenario(ctx, req.ID, &emergent.Scenario{
+					scen, err := client.CreateScenario(ctx, req.ID, &emergent.Scenario{
 						Name:  getString(scenMap, "name"),
 						Title: getString(scenMap, "title"),
 						Given: getString(scenMap, "given"),
@@ -250,8 +255,8 @@ func (t *SpecArtifact) addSpec(ctx context.Context, changeID string, content map
 }
 
 // addDesign creates a Design for the change (1:1, rejects duplicates).
-func (t *SpecArtifact) addDesign(ctx context.Context, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
-	has, err := t.hasRelType(ctx, changeID, emergent.RelHasDesign)
+func (t *SpecArtifact) addDesign(ctx context.Context, client *emergent.Client, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
+	has, err := t.hasRelType(ctx, client, changeID, emergent.RelHasDesign)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +264,7 @@ func (t *SpecArtifact) addDesign(ctx context.Context, changeID string, content m
 		return mcp.ErrorResult("Change already has a Design (1:1 relationship)"), nil
 	}
 
-	design, err := t.client.CreateDesign(ctx, changeID, &emergent.Design{
+	design, err := client.CreateDesign(ctx, changeID, &emergent.Design{
 		Approach:    getString(content, "approach"),
 		Decisions:   getString(content, "decisions"),
 		DataFlow:    getString(content, "data_flow"),
@@ -278,8 +283,8 @@ func (t *SpecArtifact) addDesign(ctx context.Context, changeID string, content m
 }
 
 // addTask creates a Task for the change.
-func (t *SpecArtifact) addTask(ctx context.Context, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
-	task, err := t.client.CreateTask(ctx, changeID, &emergent.Task{
+func (t *SpecArtifact) addTask(ctx context.Context, client *emergent.Client, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
+	task, err := client.CreateTask(ctx, changeID, &emergent.Task{
 		Number:             getString(content, "number"),
 		Description:        getString(content, "description"),
 		TaskType:           getString(content, "task_type"),
@@ -305,7 +310,7 @@ func (t *SpecArtifact) addTask(ctx context.Context, changeID string, content map
 	if blocks, ok := content["blocks"].([]any); ok {
 		for _, b := range blocks {
 			if blockedID, ok := b.(string); ok {
-				if _, err := t.client.CreateRelationship(ctx, emergent.RelBlocks, task.ID, blockedID, nil); err != nil {
+				if _, err := client.CreateRelationship(ctx, emergent.RelBlocks, task.ID, blockedID, nil); err != nil {
 					return nil, fmt.Errorf("creating blocks relationship: %w", err)
 				}
 			}
@@ -314,14 +319,14 @@ func (t *SpecArtifact) addTask(ctx context.Context, changeID string, content map
 
 	// Create implements relationship if specified
 	if implID := getString(content, "implements"); implID != "" {
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelImplements, task.ID, implID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelImplements, task.ID, implID, nil); err != nil {
 			return nil, fmt.Errorf("creating implements relationship: %w", err)
 		}
 	}
 
 	// Create subtask relationship if specified
 	if parentID := getString(content, "parent_task_id"); parentID != "" {
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelHasSubtask, parentID, task.ID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelHasSubtask, parentID, task.ID, nil); err != nil {
 			return nil, fmt.Errorf("creating subtask relationship: %w", err)
 		}
 	}
@@ -331,19 +336,19 @@ func (t *SpecArtifact) addTask(ctx context.Context, changeID string, content map
 
 // addRequirement creates a Requirement linked to a Spec (spec_id in content).
 // If the parent Spec is already status=ready, it is reverted to draft.
-func (t *SpecArtifact) addRequirement(ctx context.Context, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addRequirement(ctx context.Context, client *emergent.Client, content map[string]any) (*mcp.ToolsCallResult, error) {
 	specID := getString(content, "spec_id")
 	if specID == "" {
 		return mcp.ErrorResult("content.spec_id is required for requirement artifacts"), nil
 	}
 
 	// Revert parent Spec to draft if it's currently ready
-	parentReverted, err := t.revertParentToDraft(ctx, specID)
+	parentReverted, err := t.revertParentToDraft(ctx, client, specID)
 	if err != nil {
 		return nil, fmt.Errorf("checking parent readiness: %w", err)
 	}
 
-	req, err := t.client.CreateRequirement(ctx, specID, &emergent.Requirement{
+	req, err := client.CreateRequirement(ctx, specID, &emergent.Requirement{
 		Name:        getString(content, "name"),
 		Description: getString(content, "description"),
 		Strength:    getString(content, "strength"),
@@ -370,19 +375,19 @@ func (t *SpecArtifact) addRequirement(ctx context.Context, content map[string]an
 
 // addScenario creates a Scenario linked to a Requirement (requirement_id in content).
 // If the parent Requirement is already status=ready, it is reverted to draft.
-func (t *SpecArtifact) addScenario(ctx context.Context, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addScenario(ctx context.Context, client *emergent.Client, content map[string]any) (*mcp.ToolsCallResult, error) {
 	reqID := getString(content, "requirement_id")
 	if reqID == "" {
 		return mcp.ErrorResult("content.requirement_id is required for scenario artifacts"), nil
 	}
 
 	// Revert parent Requirement to draft if it's currently ready
-	parentReverted, err := t.revertParentToDraft(ctx, reqID)
+	parentReverted, err := t.revertParentToDraft(ctx, client, reqID)
 	if err != nil {
 		return nil, fmt.Errorf("checking parent readiness: %w", err)
 	}
 
-	scen, err := t.client.CreateScenario(ctx, reqID, &emergent.Scenario{
+	scen, err := client.CreateScenario(ctx, reqID, &emergent.Scenario{
 		Name:  getString(content, "name"),
 		Title: getString(content, "title"),
 		Given: getString(content, "given"),
@@ -409,7 +414,7 @@ func (t *SpecArtifact) addScenario(ctx context.Context, content map[string]any) 
 }
 
 // addScenarioStep creates a ScenarioStep linked to a Scenario.
-func (t *SpecArtifact) addScenarioStep(ctx context.Context, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addScenarioStep(ctx context.Context, client *emergent.Client, content map[string]any) (*mcp.ToolsCallResult, error) {
 	scenarioID := getString(content, "scenario_id")
 	if scenarioID == "" {
 		return mcp.ErrorResult("content.scenario_id is required for scenario_step artifacts"), nil
@@ -421,26 +426,26 @@ func (t *SpecArtifact) addScenarioStep(ctx context.Context, content map[string]a
 	}
 	labels := getStringSlice(content, "tags")
 
-	obj, err := t.client.CreateObject(ctx, emergent.TypeScenarioStep, nil, props, labels)
+	obj, err := client.CreateObject(ctx, emergent.TypeScenarioStep, nil, props, labels)
 	if err != nil {
 		return nil, fmt.Errorf("creating scenario step: %w", err)
 	}
 
 	// Link to scenario
-	if _, err := t.client.CreateRelationship(ctx, emergent.RelHasStep, scenarioID, obj.ID, nil); err != nil {
+	if _, err := client.CreateRelationship(ctx, emergent.RelHasStep, scenarioID, obj.ID, nil); err != nil {
 		return nil, fmt.Errorf("linking step to scenario: %w", err)
 	}
 
 	// Auto-create occurs_in relationship if context_id is provided
 	if contextID := getString(content, "context_id"); contextID != "" {
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelOccursIn, obj.ID, contextID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelOccursIn, obj.ID, contextID, nil); err != nil {
 			return nil, fmt.Errorf("creating occurs_in relationship: %w", err)
 		}
 	}
 
 	// Auto-create performs relationship if action_id is provided
 	if actionID := getString(content, "action_id"); actionID != "" {
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelPerforms, obj.ID, actionID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelPerforms, obj.ID, actionID, nil); err != nil {
 			return nil, fmt.Errorf("creating performs relationship: %w", err)
 		}
 	}
@@ -453,7 +458,7 @@ func (t *SpecArtifact) addScenarioStep(ctx context.Context, content map[string]a
 }
 
 // addTestCase creates a TestCase and optionally links it to a Scenario.
-func (t *SpecArtifact) addTestCase(ctx context.Context, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addTestCase(ctx context.Context, client *emergent.Client, content map[string]any) (*mcp.ToolsCallResult, error) {
 	props := map[string]any{
 		"name":           getString(content, "name"),
 		"test_file":      getString(content, "test_file"),
@@ -463,18 +468,18 @@ func (t *SpecArtifact) addTestCase(ctx context.Context, content map[string]any) 
 	}
 	key := getString(content, "name")
 
-	obj, err := t.client.CreateObject(ctx, emergent.TypeTestCase, &key, props, getStringSlice(content, "tags"))
+	obj, err := client.CreateObject(ctx, emergent.TypeTestCase, &key, props, getStringSlice(content, "tags"))
 	if err != nil {
 		return nil, fmt.Errorf("creating test case: %w", err)
 	}
 
 	// Link to scenario if provided
 	if scenarioID := getString(content, "scenario_id"); scenarioID != "" {
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelTests, obj.ID, scenarioID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelTests, obj.ID, scenarioID, nil); err != nil {
 			return nil, fmt.Errorf("creating tests relationship: %w", err)
 		}
 		// Also create the inverse tested_by
-		if _, err := t.client.CreateRelationship(ctx, emergent.RelTestedBy, scenarioID, obj.ID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, emergent.RelTestedBy, scenarioID, obj.ID, nil); err != nil {
 			return nil, fmt.Errorf("creating tested_by relationship: %w", err)
 		}
 	}
@@ -488,7 +493,7 @@ func (t *SpecArtifact) addTestCase(ctx context.Context, content map[string]any) 
 }
 
 // addConstitution creates a Constitution and links it to the Change via governed_by.
-func (t *SpecArtifact) addConstitution(ctx context.Context, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addConstitution(ctx context.Context, client *emergent.Client, changeID string, content map[string]any) (*mcp.ToolsCallResult, error) {
 	props := map[string]any{
 		"name":                  getString(content, "name"),
 		"version":               getString(content, "version"),
@@ -501,13 +506,13 @@ func (t *SpecArtifact) addConstitution(ctx context.Context, changeID string, con
 	}
 	key := getString(content, "name")
 
-	obj, err := t.client.CreateObject(ctx, emergent.TypeConstitution, &key, props, getStringSlice(content, "tags"))
+	obj, err := client.CreateObject(ctx, emergent.TypeConstitution, &key, props, getStringSlice(content, "tags"))
 	if err != nil {
 		return nil, fmt.Errorf("creating constitution: %w", err)
 	}
 
 	// Link change to constitution via governed_by
-	if _, err := t.client.CreateRelationship(ctx, emergent.RelGovernedBy, changeID, obj.ID, nil); err != nil {
+	if _, err := client.CreateRelationship(ctx, emergent.RelGovernedBy, changeID, obj.ID, nil); err != nil {
 		return nil, fmt.Errorf("creating governed_by relationship: %w", err)
 	}
 
@@ -531,7 +536,7 @@ func (t *SpecArtifact) addConstitution(ctx context.Context, changeID string, con
 //
 // The relationship points to the version-specific object ID, providing a
 // point-in-time snapshot of the entity state the Change was designed against.
-func (t *SpecArtifact) addGenericEntity(ctx context.Context, typeName string, content map[string]any, labels []string, changeID string) (*mcp.ToolsCallResult, error) {
+func (t *SpecArtifact) addGenericEntity(ctx context.Context, client *emergent.Client, typeName string, content map[string]any, labels []string, changeID string) (*mcp.ToolsCallResult, error) {
 	// Extract key from name field
 	key := getString(content, "name")
 	var keyPtr *string
@@ -565,13 +570,13 @@ func (t *SpecArtifact) addGenericEntity(ctx context.Context, typeName string, co
 	action := "Created"
 	changeRelType := emergent.RelChangeCreates // default: new entity
 	if key != "" {
-		existing, err := t.client.FindByTypeAndKey(ctx, typeName, key)
+		existing, err := client.FindByTypeAndKey(ctx, typeName, key)
 		if err != nil {
 			return nil, fmt.Errorf("checking for existing %s: %w", typeName, err)
 		}
 		if existing != nil {
 			// Entity exists — try to update it. UpdateObject returns the new version's ID.
-			obj, err = t.client.UpdateObject(ctx, existing.ID, props, labels)
+			obj, err = client.UpdateObject(ctx, existing.ID, props, labels)
 			if err != nil {
 				return nil, fmt.Errorf("updating existing %s %q: %w", typeName, key, err)
 			}
@@ -591,14 +596,14 @@ func (t *SpecArtifact) addGenericEntity(ctx context.Context, typeName string, co
 
 	if obj == nil {
 		var err error
-		obj, err = t.client.CreateObject(ctx, typeName, keyPtr, props, labels)
+		obj, err = client.CreateObject(ctx, typeName, keyPtr, props, labels)
 		if err != nil {
 			return nil, fmt.Errorf("creating %s: %w", typeName, err)
 		}
 	}
 
 	// Create relationships if specified in content
-	relResults, err := t.createEntityRelationships(ctx, typeName, obj.ID, content)
+	relResults, err := t.createEntityRelationships(ctx, client, typeName, obj.ID, content)
 	if err != nil {
 		// Log but don't fail — the entity was already created/updated
 		relResults = append(relResults, fmt.Sprintf("relationship error: %v", err))
@@ -606,7 +611,7 @@ func (t *SpecArtifact) addGenericEntity(ctx context.Context, typeName string, co
 
 	// Create version-aware change tracking relationship
 	if changeID != "" {
-		created, err := t.ensureRelationship(ctx, changeRelType, changeID, obj.ID)
+		created, err := t.ensureRelationship(ctx, client, changeRelType, changeID, obj.ID)
 		if err != nil {
 			relResults = append(relResults, fmt.Sprintf("change tracking error: %v", err))
 		} else if created {
@@ -640,7 +645,7 @@ func (t *SpecArtifact) addGenericEntity(ctx context.Context, typeName string, co
 // Relationships are deduplicated: if a relationship with the same type+src+dst
 // already exists, it is skipped rather than creating a duplicate.
 // Uses a single GetObjectEdges call to pre-fetch existing relationships for batch dedup.
-func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, entityID string, content map[string]any) ([]string, error) {
+func (t *SpecArtifact) createEntityRelationships(ctx context.Context, client *emergent.Client, typeName, entityID string, content map[string]any) ([]string, error) {
 	var results []string
 
 	// Pre-fetch all existing outgoing edges for this entity to batch dedup checks.
@@ -648,7 +653,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 	// the Emergent ID/CanonicalID mismatch: GetObjectEdges may return a different ID
 	// variant than FindByTypeAndKey or GetObject for the same entity.
 	existingEdges := make(map[string]map[string]bool) // relType → set of dstIDs (dual-indexed)
-	edges, err := t.client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
+	edges, err := client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
 		Direction: "outgoing",
 	})
 	if err == nil {
@@ -664,7 +669,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 		// Resolve destination objects to get both ID variants
 		resolvedDstIdx := make(emergent.ObjectIndex)
 		if len(dstIDs) > 0 {
-			if dstObjs, err := t.client.GetObjects(ctx, dstIDs); err == nil {
+			if dstObjs, err := client.GetObjects(ctx, dstIDs); err == nil {
 				resolvedDstIdx = emergent.NewObjectIndex(dstObjs)
 			}
 		}
@@ -684,7 +689,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 	}
 	// Also fetch incoming edges for reverse relationships (e.g., uses_component ← context)
 	incomingEdges := make(map[string]map[string]bool) // relType → set of srcIDs (dual-indexed)
-	inEdges, err := t.client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
+	inEdges, err := client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
 		Direction: "incoming",
 	})
 	if err == nil {
@@ -700,7 +705,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 		// Resolve source objects to get both ID variants
 		resolvedSrcIdx := make(emergent.ObjectIndex)
 		if len(srcIDs) > 0 {
-			if srcObjs, err := t.client.GetObjects(ctx, srcIDs); err == nil {
+			if srcObjs, err := client.GetObjects(ctx, srcIDs); err == nil {
 				resolvedSrcIdx = emergent.NewObjectIndex(srcObjs)
 			}
 		}
@@ -740,7 +745,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 				return false, nil
 			}
 		}
-		if _, err := t.client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
+		if _, err := client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -749,7 +754,7 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 	// Handle patterns: look up each by name and create uses_pattern relationship
 	if patternNames := getStringSlice(content, "patterns"); len(patternNames) > 0 {
 		for _, pName := range patternNames {
-			pattern, err := t.client.FindByTypeAndKey(ctx, emergent.TypePattern, pName)
+			pattern, err := client.FindByTypeAndKey(ctx, emergent.TypePattern, pName)
 			if err != nil {
 				results = append(results, fmt.Sprintf("pattern %q lookup failed: %v", pName, err))
 				continue
@@ -888,8 +893,8 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, typeName, 
 
 // ensureRelationship creates a relationship only if one with the same type+src+dst
 // doesn't already exist. Returns (true, nil) if created, (false, nil) if already exists.
-func (t *SpecArtifact) ensureRelationship(ctx context.Context, relType, srcID, dstID string) (bool, error) {
-	existing, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+func (t *SpecArtifact) ensureRelationship(ctx context.Context, client *emergent.Client, relType, srcID, dstID string) (bool, error) {
+	existing, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  relType,
 		SrcID: srcID,
 		DstID: dstID,
@@ -901,15 +906,15 @@ func (t *SpecArtifact) ensureRelationship(ctx context.Context, relType, srcID, d
 	if len(existing) > 0 {
 		return false, nil // already exists
 	}
-	if _, err := t.client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
+	if _, err := client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
 // hasRelType checks if a change has at least one outgoing relationship of the given type.
-func (t *SpecArtifact) hasRelType(ctx context.Context, changeID, relType string) (bool, error) {
-	rels, err := t.client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
+func (t *SpecArtifact) hasRelType(ctx context.Context, client *emergent.Client, changeID, relType string) (bool, error) {
+	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  relType,
 		SrcID: changeID,
 		Limit: 1,
@@ -926,8 +931,8 @@ func (t *SpecArtifact) hasRelType(ctx context.Context, changeID, relType string)
 // reverts it to draft. This is called when adding a child artifact (e.g.,
 // adding a Requirement to a Spec or a Scenario to a Requirement).
 // Returns true if the parent was reverted, false if it was already draft.
-func (t *SpecArtifact) revertParentToDraft(ctx context.Context, parentID string) (bool, error) {
-	obj, err := t.client.GetObject(ctx, parentID)
+func (t *SpecArtifact) revertParentToDraft(ctx context.Context, client *emergent.Client, parentID string) (bool, error) {
+	obj, err := client.GetObject(ctx, parentID)
 	if err != nil {
 		return false, fmt.Errorf("getting parent object %s: %w", parentID, err)
 	}
@@ -938,7 +943,7 @@ func (t *SpecArtifact) revertParentToDraft(ctx context.Context, parentID string)
 	}
 
 	// Parent is ready — revert to draft
-	_, err = t.client.UpdateObject(ctx, obj.ID, map[string]any{"status": emergent.StatusDraft}, nil)
+	_, err = client.UpdateObject(ctx, obj.ID, map[string]any{"status": emergent.StatusDraft}, nil)
 	if err != nil {
 		return false, fmt.Errorf("reverting parent %s to draft: %w", parentID, err)
 	}
