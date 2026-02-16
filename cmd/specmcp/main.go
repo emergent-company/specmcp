@@ -43,6 +43,7 @@ import (
 	"github.com/emergent-company/specmcp/internal/mcp"
 	"github.com/emergent-company/specmcp/internal/scheduler"
 	"github.com/emergent-company/specmcp/internal/tools/constitution"
+	"github.com/emergent-company/specmcp/internal/tools/improvement"
 	"github.com/emergent-company/specmcp/internal/tools/janitor"
 	"github.com/emergent-company/specmcp/internal/tools/patterns"
 	"github.com/emergent-company/specmcp/internal/tools/query"
@@ -146,6 +147,9 @@ func run() error {
 	registry.Register(tasks.NewAssignTask(emFactory))
 	registry.Register(tasks.NewCompleteTask(emFactory))
 	registry.Register(tasks.NewGetCriticalPath(emFactory))
+
+	// Register improvement tools
+	registry.Register(improvement.NewCreateTool(emFactory))
 
 	// Register pattern tools
 	registry.Register(patterns.NewSuggestPatterns(emFactory))

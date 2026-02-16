@@ -32,6 +32,7 @@ const (
 	TypeConstitution     = "Constitution"
 	TypeGraphSync        = "GraphSync"
 	TypeMaintenanceIssue = "MaintenanceIssue"
+	TypeImprovement      = "Improvement"
 )
 
 // Relationship type constants.
@@ -109,6 +110,7 @@ const (
 	StatusInProgress = "in_progress"
 	StatusCompleted  = "completed"
 	StatusBlocked    = "blocked"
+	StatusProposed   = "proposed" // For Improvement entities
 )
 
 // Artifact readiness status constants.
@@ -392,4 +394,30 @@ type MaintenanceIssue struct {
 	JanitorRunID  string     `json:"janitor_run_id,omitempty"`
 	AffectedCount int        `json:"affected_count,omitempty"`
 	Tags          []string   `json:"tags,omitempty"`
+}
+
+// Improvement represents a lightweight improvement idea that doesn't require full Change workflow.
+// Can be code-focused (enhancement, refactor) or knowledge-focused (constitution_rule, pattern_proposal).
+type Improvement struct {
+	ID          string     `json:"id,omitempty"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Domain      string     `json:"domain"`             // ui, ux, performance, security, api, data, testing, infrastructure, documentation, accessibility
+	Type        string     `json:"type"`               // enhancement, refactor, optimization, bug_fix, tech_debt, cleanup, dx, constitution_rule, pattern_proposal, technology_choice, best_practice
+	Effort      string     `json:"effort,omitempty"`   // trivial, small, medium, large
+	Priority    string     `json:"priority,omitempty"` // low, medium, high, critical
+	Status      string     `json:"status"`             // proposed, planned, in_progress, completed, deferred, rejected
+	ProposedAt  *time.Time `json:"proposed_at,omitempty"`
+	PlannedAt   *time.Time `json:"planned_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	ProposedBy  string     `json:"proposed_by"` // CodingAgent name
+	Tags        []string   `json:"tags,omitempty"`
+
+	// Knowledge contribution fields (used for constitution_rule, pattern_proposal, technology_choice, best_practice)
+	TriggerQuote         string                 `json:"trigger_quote,omitempty"`          // Exact user quote that triggered this
+	Evidence             []string               `json:"evidence,omitempty"`               // Files, observations supporting this
+	ProposedAmendment    map[string]interface{} `json:"proposed_amendment,omitempty"`     // For constitution_rule: Constitution changes
+	ProposedPattern      map[string]interface{} `json:"proposed_pattern,omitempty"`       // For pattern_proposal: Pattern definition
+	ProposedTechChoice   map[string]interface{} `json:"proposed_tech_choice,omitempty"`   // For technology_choice: Tech decision
+	ProposedBestPractice map[string]interface{} `json:"proposed_best_practice,omitempty"` // For best_practice: Coding standard
 }

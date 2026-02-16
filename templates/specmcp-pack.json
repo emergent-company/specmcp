@@ -776,6 +776,99 @@
         }
       }
     },
+    "Improvement": {
+      "type": "object",
+      "description": "Lightweight improvement idea that doesn't require full Change workflow. Can have tasks as checklist items. Used for small enhancements, refactoring, tech debt, and quick wins.",
+      "required": ["title", "description", "domain", "type", "status", "proposed_by", "proposed_at"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short summary (e.g. 'Add loading spinner to user list')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed explanation of the improvement and its value"
+        },
+        "domain": {
+          "type": "string",
+          "enum": ["ui", "ux", "performance", "security", "api", "data", "testing", "infrastructure", "documentation", "accessibility"],
+          "description": "What area this improvement affects"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "enhancement", "refactor", "optimization", "bug_fix", "tech_debt", "cleanup", "dx",
+            "constitution_rule", "pattern_proposal", "technology_choice", "best_practice"
+          ],
+          "description": "What kind of work this represents. Code types: enhancement, refactor, optimization, bug_fix, tech_debt, cleanup, dx. Knowledge types: constitution_rule (propose project rule), pattern_proposal (define observed pattern), technology_choice (document tech decision), best_practice (coding standard)"
+        },
+        "effort": {
+          "type": "string",
+          "enum": ["trivial", "small", "medium", "large"],
+          "description": "Size estimate: trivial (<1hr), small (1-4hr), medium (1-2d), large (>2d, consider Change)"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "description": "How urgent this improvement is"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "planned", "in_progress", "completed", "deferred", "rejected"],
+          "description": "Lifecycle: proposed → planned (tasks added) → in_progress → completed"
+        },
+        "proposed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this improvement was created"
+        },
+        "planned_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When status changed to 'planned' (all tasks defined)"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When all tasks were completed"
+        },
+        "proposed_by": {
+          "type": "string",
+          "description": "CodingAgent name who proposed this"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Namespaced tags (e.g. 'quick-win', 'api:auth', 'needs-approval')"
+        },
+        "trigger_quote": {
+          "type": "string",
+          "description": "Exact user quote that triggered this improvement (required for knowledge types)"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Files, commits, or observations supporting this improvement"
+        },
+        "proposed_amendment": {
+          "type": "object",
+          "description": "For constitution_rule: proposed changes to Constitution (guardrails, principles, etc.)"
+        },
+        "proposed_pattern": {
+          "type": "object",
+          "description": "For pattern_proposal: pattern definition ready to formalize (name, type, example_code, usage_guidance)"
+        },
+        "proposed_tech_choice": {
+          "type": "object",
+          "description": "For technology_choice: technology decision documentation (technology, purpose, scope, rationale)"
+        },
+        "proposed_best_practice": {
+          "type": "object",
+          "description": "For best_practice: coding standard or guideline (rule, example, benefit)"
+        }
+      }
+    }
+  },
     "MaintenanceIssue": {
       "type": "object",
       "description": "A data integrity or compliance problem detected by the janitor agent. Unlike feature Changes, these are reactive maintenance items that restore graph health.",
@@ -1080,9 +1173,39 @@
       "cardinality": "many-to-one"
     },
     "proposed_by": {
-      "description": "MaintenanceIssue was proposed/detected by a coding agent (typically janitor-agent)",
-      "sourceTypes": ["MaintenanceIssue"],
+      "description": "Entity was proposed/detected by a coding agent",
+      "sourceTypes": ["MaintenanceIssue", "Improvement"],
       "targetTypes": ["CodingAgent"],
+      "cardinality": "many-to-one"
+    },
+    "has_task": {
+      "description": "Parent entity has an implementation task",
+      "sourceTypes": ["Change", "Improvement"],
+      "targetTypes": ["Task"],
+      "cardinality": "one-to-many"
+    },
+    "affects_entity": {
+      "description": "Issue or improvement affects a specific entity",
+      "sourceTypes": ["MaintenanceIssue", "Improvement"],
+      "targetTypes": ["Change", "Proposal", "Spec", "Requirement", "Scenario", "Design", "Task", "Context", "UIComponent", "Action", "Pattern"],
+      "cardinality": "many-to-many"
+    },
+    "scoped_to_app": {
+      "description": "Workflow artifact or improvement affects or is scoped to specific app(s)",
+      "sourceTypes": ["Change", "Spec", "Requirement", "Design", "Task", "Improvement"],
+      "targetTypes": ["App"],
+      "cardinality": "many-to-many"
+    },
+    "promoted_to_change": {
+      "description": "Improvement was promoted to a formal Change",
+      "sourceTypes": ["Improvement"],
+      "targetTypes": ["Change"],
+      "cardinality": "many-to-one"
+    },
+    "superseded_by": {
+      "description": "Improvement was superseded by a better/newer improvement",
+      "sourceTypes": ["Improvement"],
+      "targetTypes": ["Improvement"],
       "cardinality": "many-to-one"
     }
   },
