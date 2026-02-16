@@ -1,0 +1,215 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            platform: linux-amd64
+          - goos: linux
+            goarch: arm64
+            platform: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            platform: darwin-arm64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" \
+            -o dist/specmcp-${{ matrix.platform }} ./cmd/specmcp/
+
+      - name: Create archive
+        run: |
+          cd dist
+          tar -czvf specmcp-${{ matrix.platform }}.tar.gz specmcp-${{ matrix.platform }}
+          sha256sum specmcp-${{ matrix.platform }}.tar.gz > specmcp-${{ matrix.platform }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: specmcp-${{ matrix.platform }}
+          path: |
+            dist/specmcp-${{ matrix.platform }}.tar.gz
+            dist/specmcp-${{ matrix.platform }}.tar.gz.sha256
+
+  build-arch:
+    name: Build Arch Linux Package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git go
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "0.1.0")
+          CLEAN_VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION (clean: $CLEAN_VERSION)"
+
+      - name: Update PKGBUILD version
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.version.outputs.clean_version }}/" pkg/arch/PKGBUILD
+
+      - name: Build package
+        run: |
+          # Create a non-root user for makepkg (it refuses to run as root)
+          useradd -m builder
+          chown -R builder:builder .
+          
+          # Build as the builder user
+          cd pkg/arch
+          su builder -c "makepkg -f --noconfirm"
+          
+          # Move package to dist
+          mkdir -p ../../dist
+          mv *.pkg.tar.zst ../../dist/ || echo "No package created"
+
+      - name: Upload Arch package
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: specmcp-arch
+          path: dist/*.pkg.tar.zst
+
+  release:
+    name: Create Release
+    needs: [build, build-arch]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p dist
+          find artifacts -type f -name "*.tar.gz" -exec cp {} dist/ \;
+          find artifacts -type f -name "*.sha256" -exec cp {} dist/ \;
+          find artifacts -type f -name "*.pkg.tar.zst" -exec cp {} dist/ \;
+          
+          # Create checksums file
+          cd dist
+          cat *.sha256 > checksums.txt || echo "No checksums found"
+          ls -lh
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Release ${{ steps.version.outputs.version }}
+            
+            ### Installation
+            
+            **Arch Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/emergent-company/specmcp/main/install.sh | sh
+            sudo systemctl enable --now specmcp
+            ```
+            
+            **macOS / Other Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/emergent-company/specmcp/main/install.sh | sh
+            export PATH="$HOME/.specmcp/bin:$PATH"
+            ```
+            
+            **Upgrade:**
+            ```bash
+            specmcp upgrade
+            ```
+            
+            ### Platforms
+            
+            - macOS (darwin-arm64, darwin-amd64)
+            - Linux (linux-amd64, linux-arm64)
+            - Arch Linux package (x86_64)
+            
+            ### Checksums
+            
+            See `checksums.txt` for SHA256 hashes of all archives.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
