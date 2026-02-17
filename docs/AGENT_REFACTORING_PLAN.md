@@ -1,10 +1,43 @@
 # Agent Refactoring & Janitor Improvements Plan
 
 **Created**: 2026-02-17  
-**Status**: Planning  
-**Target Version**: v0.7.0
+**Completed**: 2026-02-17  
+**Status**: ✅ Complete  
+**Version**: v0.6.4 (deployed to production)
 
-## Overview
+## Completion Summary
+
+All objectives achieved:
+
+1. ✅ **Agent Refactoring**: CodingAgent → Agent with `agent_type` field
+   - Updated entity types, relationships, and all tool code
+   - Migrated 2 production entities (janitor, test-agent)
+   - Old entities marked inactive with `active: false`
+
+2. ✅ **Template Pack V2**: Registered and deployed to production
+   - Pack ID: `b6695ed5-c70c-4064-b320-ec11e8411685`
+   - SDK upgraded: v0.13.0 → v0.14.3
+   - Format conversion: object → array format
+
+3. ✅ **Search Filter Fix**: Inactive entities excluded from search results
+   - Fixed FTS to use defaultSearchTypes when user doesn't specify types
+   - Added `isActive()` filter for both FTS and fallback search
+   - Verified old CodingAgent entities no longer appear in searches
+
+4. ✅ **Documentation**: All 13 docs updated with Agent terminology
+
+5. ✅ **Production Deployment**: Service running with v0.6.4
+   - Binary deployed to `/usr/bin/specmcp` on mcj-emergent
+   - Service verified healthy on port 21452
+
+**Git Commits**:
+- c1445b1: Refactor CodingAgent → Agent with agent_type
+- 82502de: Update documentation
+- 2992e7f: Filter inactive entities from search results
+
+---
+
+## Original Plan Overview
 
 Refactor `CodingAgent` → `Agent` to support multiple agent types (coding, maintenance, research, etc.) and enhance janitor to create actionable Improvement entities with subtasks for all warnings found.
 
