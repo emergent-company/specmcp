@@ -37,8 +37,8 @@ func main() {
 
 	logger.Info("connecting to Emergent", "url", serverURL, "project_id", projectID)
 
-	// Create client factory
-	factory := emergent.NewClientFactory(serverURL, logger)
+	// Create client factory with token as admin token, 5 retries, 5 min long outage interval, 20 failure threshold
+	factory := emergent.NewClientFactory(serverURL, token, 5, 5, 20, logger)
 
 	// Create context with token and project
 	ctx := emergent.WithToken(context.Background(), token)

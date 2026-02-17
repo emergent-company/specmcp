@@ -106,6 +106,8 @@ func run() error {
 		"version", version,
 		"transport", cfg.Transport.Mode,
 		"emergent_url", cfg.Emergent.URL,
+		"request_timeout_minutes", cfg.Transport.RequestTimeoutMinutes,
+		"idle_timeout_minutes", cfg.Transport.IdleTimeoutMinutes,
 	)
 
 	// Set up signal handling
@@ -125,7 +127,14 @@ func run() error {
 		// In stdio mode, use the configured token as both user and admin token
 		adminToken = cfg.Emergent.Token
 	}
-	emFactory := emergent.NewClientFactory(cfg.Emergent.URL, adminToken, logger)
+	emFactory := emergent.NewClientFactory(
+		cfg.Emergent.URL,
+		adminToken,
+		cfg.Emergent.MaxRetries,
+		cfg.Emergent.LongOutageIntervalMins,
+		cfg.Emergent.LongOutageThreshold,
+		logger,
+	)
 
 	// Register workflow tools
 	specArtifact := workflow.NewSpecArtifact(emFactory)
@@ -229,14 +238,18 @@ func runHTTP(ctx context.Context, server *mcp.Server, cfg *config.Config, logger
 
 	addr := net.JoinHostPort(cfg.Transport.Host, cfg.Transport.Port)
 
+	// Use configured timeouts
+	requestTimeout := time.Duration(cfg.Transport.RequestTimeoutMinutes) * time.Minute
+	idleTimeout := time.Duration(cfg.Transport.IdleTimeoutMinutes) * time.Minute
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           httpServer.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1MB
+		ReadHeaderTimeout: 30 * time.Second, // Fixed 30s is reasonable for headers
+		ReadTimeout:       requestTimeout,   // Configurable for long requests
+		WriteTimeout:      requestTimeout,   // Configurable for long responses
+		IdleTimeout:       idleTimeout,      // Configurable to keep connections alive
+		MaxHeaderBytes:    1 << 20,          // 1MB
 	}
 
 	// Start HTTP server in a goroutine.

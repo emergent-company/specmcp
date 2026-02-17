@@ -19,10 +19,13 @@ type Config struct {
 
 // EmergentConfig holds Emergent connection details.
 type EmergentConfig struct {
-	URL        string `toml:"url"`
-	Token      string `toml:"token"`       // Project-scoped token (emt_*) or standalone API key.
-	AdminToken string `toml:"admin_token"` // Admin token for server-side operations (janitor, health checks) in HTTP mode.
-	ProjectID  string `toml:"project_id"`  // Optional: explicit project ID (X-Project-ID header).
+	URL                    string `toml:"url"`
+	Token                  string `toml:"token"`                     // Project-scoped token (emt_*) or standalone API key.
+	AdminToken             string `toml:"admin_token"`               // Admin token for server-side operations (janitor, health checks) in HTTP mode.
+	ProjectID              string `toml:"project_id"`                // Optional: explicit project ID (X-Project-ID header).
+	MaxRetries             int    `toml:"max_retries"`               // Maximum number of retry attempts for failed requests (default: 5, -1 = infinite).
+	LongOutageIntervalMins int    `toml:"long_outage_interval_mins"` // After many failures, switch to this interval in minutes (default: 5).
+	LongOutageThreshold    int    `toml:"long_outage_threshold"`     // Number of consecutive failures before switching to long outage mode (default: 20).
 }
 
 // ServerConfig holds MCP server metadata.
@@ -41,6 +44,10 @@ type TransportConfig struct {
 	Host string `toml:"host"`
 	// CORSOrigins is a comma-separated list of allowed CORS origins (default: "*").
 	CORSOrigins string `toml:"cors_origins"`
+	// RequestTimeoutMinutes is the timeout for HTTP requests in minutes (default: 5).
+	RequestTimeoutMinutes int `toml:"request_timeout_minutes"`
+	// IdleTimeoutMinutes is how long to keep idle connections alive in minutes (default: 5).
+	IdleTimeoutMinutes int `toml:"idle_timeout_minutes"`
 }
 
 // LogConfig holds logging configuration.
@@ -70,17 +77,22 @@ func Load(configPath string) (*Config, error) {
 	// Start with defaults
 	cfg := &Config{
 		Emergent: EmergentConfig{
-			URL: "http://localhost:3002",
+			URL:                    "http://localhost:3002",
+			MaxRetries:             5,  // Default to 5 retries (more aggressive)
+			LongOutageIntervalMins: 5,  // After many failures, wait 5 minutes between retries
+			LongOutageThreshold:    20, // Switch to long outage mode after 20 consecutive failures
 		},
 		Server: ServerConfig{
 			Name:    "specmcp",
 			Version: "0.1.0",
 		},
 		Transport: TransportConfig{
-			Mode:        "stdio",
-			Port:        "21452",
-			Host:        "0.0.0.0",
-			CORSOrigins: "*",
+			Mode:                  "stdio",
+			Port:                  "21452",
+			Host:                  "0.0.0.0",
+			CORSOrigins:           "*",
+			RequestTimeoutMinutes: 5, // 5 minute default for long operations
+			IdleTimeoutMinutes:    5, // Keep connections alive for 5 minutes
 		},
 		Log: LogConfig{
 			Level: "info",
@@ -161,11 +173,45 @@ func (c *Config) applyEnv() {
 	envOverride("EMERGENT_ADMIN_TOKEN", &c.Emergent.AdminToken)
 	envOverride("EMERGENT_PROJECT_ID", &c.Emergent.ProjectID)
 
+	// Emergent retry configuration
+	if v := os.Getenv("EMERGENT_MAX_RETRIES"); v != "" {
+		var retries int
+		if _, err := fmt.Sscanf(v, "%d", &retries); err == nil {
+			c.Emergent.MaxRetries = retries
+		}
+	}
+	if v := os.Getenv("EMERGENT_LONG_OUTAGE_INTERVAL_MINS"); v != "" {
+		var mins int
+		if _, err := fmt.Sscanf(v, "%d", &mins); err == nil && mins > 0 {
+			c.Emergent.LongOutageIntervalMins = mins
+		}
+	}
+	if v := os.Getenv("EMERGENT_LONG_OUTAGE_THRESHOLD"); v != "" {
+		var threshold int
+		if _, err := fmt.Sscanf(v, "%d", &threshold); err == nil && threshold > 0 {
+			c.Emergent.LongOutageThreshold = threshold
+		}
+	}
+
 	// Transport
 	envOverride("SPECMCP_TRANSPORT", &c.Transport.Mode)
 	envOverride("SPECMCP_PORT", &c.Transport.Port)
 	envOverride("SPECMCP_HOST", &c.Transport.Host)
 	envOverride("SPECMCP_CORS_ORIGINS", &c.Transport.CORSOrigins)
+
+	// Transport timeouts
+	if v := os.Getenv("SPECMCP_REQUEST_TIMEOUT_MINUTES"); v != "" {
+		var mins int
+		if _, err := fmt.Sscanf(v, "%d", &mins); err == nil && mins > 0 {
+			c.Transport.RequestTimeoutMinutes = mins
+		}
+	}
+	if v := os.Getenv("SPECMCP_IDLE_TIMEOUT_MINUTES"); v != "" {
+		var mins int
+		if _, err := fmt.Sscanf(v, "%d", &mins); err == nil && mins > 0 {
+			c.Transport.IdleTimeoutMinutes = mins
+		}
+	}
 
 	// Logging
 	envOverride("SPECMCP_LOG_LEVEL", &c.Log.Level)

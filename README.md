@@ -126,10 +126,15 @@ Environment variables always override config file values.
 | `EMERGENT_TOKEN` | stdio only | - | Project-scoped token (`emt_*`) or API key. Required for stdio mode; not needed for HTTP mode (clients send their own token). |
 | `EMERGENT_URL` | No | `http://localhost:3002` | Emergent server URL |
 | `EMERGENT_PROJECT_ID` | No | - | Required when using standalone API keys |
+| `EMERGENT_MAX_RETRIES` | No | `5` | Max retry attempts for failed requests. Set to `-1` for infinite retries (keeps reconnecting forever). |
+| `EMERGENT_LONG_OUTAGE_INTERVAL_MINS` | No | `5` | After many consecutive failures, wait this many minutes between retries (prevents aggressive reconnection during long outages). |
+| `EMERGENT_LONG_OUTAGE_THRESHOLD` | No | `20` | Number of consecutive failures before switching to long outage mode (less aggressive retrying). |
 | `SPECMCP_TRANSPORT` | No | `stdio` | Transport mode: `stdio` or `http` |
 | `SPECMCP_PORT` | No | `21452` | HTTP listen port (http mode only) |
 | `SPECMCP_HOST` | No | `0.0.0.0` | HTTP listen address (http mode only) |
 | `SPECMCP_CORS_ORIGINS` | No | `*` | Comma-separated CORS origins (http mode only) |
+| `SPECMCP_REQUEST_TIMEOUT_MINUTES` | No | `5` | Request timeout in minutes (http mode only) |
+| `SPECMCP_IDLE_TIMEOUT_MINUTES` | No | `5` | Keep-alive timeout in minutes (http mode only) |
 | `SPECMCP_LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
 
 ## Usage

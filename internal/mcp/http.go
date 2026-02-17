@@ -25,10 +25,11 @@ import (
 // token in the Authorization header. This token is injected into the request
 // context and used by ClientFactory.ClientFor to create per-request SDK clients.
 type HTTPServer struct {
-	server   *Server
-	cors     string
-	logger   *slog.Logger
-	sessions sync.Map // sessionID -> *session
+	server     *Server
+	cors       string
+	logger     *slog.Logger
+	sessions   sync.Map // sessionID -> *session
+	lastActive sync.Map // sessionID -> time.Time - track last activity
 }
 
 // session tracks an MCP session established via initialize.
@@ -151,7 +152,7 @@ func (h *HTTPServer) handleSingle(w http.ResponseWriter, r *http.Request, body [
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
-	// Validate session for non-initialize requests.
+	// Validate session for non-initialize requests and update last active time.
 	if peek.Method != "initialize" {
 		sessionID := r.Header.Get("Mcp-Session-Id")
 		if sessionID != "" {
@@ -159,6 +160,8 @@ func (h *HTTPServer) handleSingle(w http.ResponseWriter, r *http.Request, body [
 				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
 				return
 			}
+			// Update last active time for session keep-alive
+			h.lastActive.Store(sessionID, time.Now())
 		}
 	}
 

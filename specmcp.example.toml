@@ -26,6 +26,25 @@
 # Env: EMERGENT_PROJECT_ID
 # project_id = ""
 
+# Maximum number of retry attempts for failed Emergent API requests.
+# Set to -1 for infinite retries (keeps trying to reconnect forever).
+# Env: EMERGENT_MAX_RETRIES
+# max_retries = 5
+
+# After many consecutive failures, wait this many minutes between retries.
+# This prevents aggressive reconnection during long outages (e.g., Emergent down for 1+ hour).
+# Env: EMERGENT_LONG_OUTAGE_INTERVAL_MINS
+# long_outage_interval_mins = 5
+
+# Number of consecutive failures before switching to long outage mode.
+# After this many failures, retries slow down to long_outage_interval_mins.
+# Env: EMERGENT_LONG_OUTAGE_THRESHOLD
+# long_outage_threshold = 20
+
+# Admin token for server-side operations (janitor, health checks) in HTTP mode.
+# Env: EMERGENT_ADMIN_TOKEN
+# admin_token = ""
+
 # ── Transport ────────────────────────────────────────────────────────
 
 [transport]
@@ -44,6 +63,16 @@
 # Comma-separated list of allowed CORS origins. Only used when mode = "http".
 # Env: SPECMCP_CORS_ORIGINS
 # cors_origins = "*"
+
+# Request timeout in minutes. How long to wait for HTTP requests/responses.
+# Increase this for long-running operations like syncs or large graph queries.
+# Env: SPECMCP_REQUEST_TIMEOUT_MINUTES
+# request_timeout_minutes = 5
+
+# Idle timeout in minutes. How long to keep idle connections alive.
+# Increase this to avoid reconnection overhead for active sessions.
+# Env: SPECMCP_IDLE_TIMEOUT_MINUTES
+# idle_timeout_minutes = 5
 
 # ── Logging ──────────────────────────────────────────────────────────
 

@@ -208,11 +208,38 @@ The HTTP mode implements the MCP Streamable HTTP transport (spec 2025-03-26):
 - **Endpoint**: `POST /mcp` for JSON-RPC messages, `DELETE /mcp` for session termination
 - **Health check**: `GET /health` returns `{"status":"ok"}`
 - **Authentication**: Clients send `Authorization: Bearer <emergent_token>` — the token is the client's own Emergent project token (`emt_*`). SpecMCP passes it through to Emergent. No server-side API key is needed.
-- **Sessions**: The server assigns an `Mcp-Session-Id` on `initialize` and tracks sessions
+- **Sessions**: The server assigns an `Mcp-Session-Id` on `initialize` and tracks sessions with activity timestamps
 - **CORS**: Configurable via `SPECMCP_CORS_ORIGINS`
 - **Request limit**: 10MB max request body
+- **Timeouts**: 
+  - Request timeout: 5 minutes (configurable via `SPECMCP_REQUEST_TIMEOUT_MINUTES`)
+  - Idle timeout: 5 minutes (configurable via `SPECMCP_IDLE_TIMEOUT_MINUTES`)
+  - Connection keep-alive: 30 seconds
+  - Connection pool: 100 max idle connections, 50 max per host
 
 Clients send JSON-RPC messages via HTTP POST and receive JSON responses. The server supports both single messages and JSON-RPC batches.
+
+### Connection Management
+
+To prevent timeouts and keep connections alive:
+
+1. **HTTP Client** (internal/emergent/client.go):
+   - Uses connection pooling with keep-alive
+   - 5-minute timeout for long operations (sync, large queries)
+   - Retains connections for 90 seconds in idle pool
+   - Maximum 50 connections per host
+
+2. **HTTP Server** (cmd/specmcp/main.go):
+   - 5-minute read/write timeouts (configurable)
+   - 5-minute idle timeout to keep sessions alive (configurable)
+   - 30-second connection establishment timeout
+
+3. **Configuration**:
+   ```bash
+   # Increase timeouts for very long operations
+   SPECMCP_REQUEST_TIMEOUT_MINUTES=10
+   SPECMCP_IDLE_TIMEOUT_MINUTES=10
+   ```
 
 ## Key Dependency
 
