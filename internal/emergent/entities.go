@@ -490,47 +490,55 @@ func (c *Client) HasRelationship(ctx context.Context, relType, srcID, dstID stri
 	return len(rels) > 0, nil
 }
 
-// --- CodingAgent ---
+// --- Agent ---
 
-// GetOrCreateCodingAgent gets or creates a CodingAgent by name.
+// GetOrCreateAgent gets or creates an Agent by name.
 // This ensures system agents (like janitor) exist in the graph.
-func (c *Client) GetOrCreateCodingAgent(ctx context.Context, agent *CodingAgent) (*CodingAgent, error) {
-	// Try to find existing agent by listing all and matching name
-	existing, err := c.ListObjects(ctx, &graph.ListObjectsOptions{
-		Type: TypeCodingAgent,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("listing CodingAgents: %w", err)
-	}
-
-	// Check if agent with this name exists
-	for _, obj := range existing {
-		if obj.Key != nil && *obj.Key == agent.Name {
-			result, err := fromProps[CodingAgent](obj)
-			if err != nil {
-				return nil, err
+func (c *Client) GetOrCreateAgent(ctx context.Context, agent *Agent) (*Agent, error) {
+	// Try to find existing agent by listing all and matching name.
+	// Check both Agent (v2) and CodingAgent (v1) types for backwards compatibility.
+	for _, entityType := range []string{TypeAgent, TypeCodingAgent} {
+		existing, err := c.ListObjects(ctx, &graph.ListObjectsOptions{
+			Type: entityType,
+		})
+		if err != nil {
+			// Type might not exist if only one pack is installed, skip
+			continue
+		}
+		for _, obj := range existing {
+			if obj.Key != nil && *obj.Key == agent.Name {
+				result, err := fromProps[Agent](obj)
+				if err != nil {
+					return nil, err
+				}
+				result.ID = obj.ID
+				return result, nil
 			}
-			result.ID = obj.ID
-			return result, nil
 		}
 	}
 
-	// Agent doesn't exist, create it
+	// Agent doesn't exist, create it as the new Agent type
 	key := agent.Name
 	props, err := toProps(agent)
 	if err != nil {
 		return nil, fmt.Errorf("converting agent to props: %w", err)
 	}
 
-	obj, err := c.CreateObject(ctx, TypeCodingAgent, &key, props, nil)
+	obj, err := c.CreateObject(ctx, TypeAgent, &key, props, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating CodingAgent: %w", err)
+		return nil, fmt.Errorf("creating Agent: %w", err)
 	}
 
-	result, err := fromProps[CodingAgent](obj)
+	result, err := fromProps[Agent](obj)
 	if err != nil {
 		return nil, err
 	}
 	result.ID = obj.ID
 	return result, nil
+}
+
+// GetOrCreateCodingAgent is a deprecated alias for GetOrCreateAgent.
+// Deprecated: Use GetOrCreateAgent instead.
+func (c *Client) GetOrCreateCodingAgent(ctx context.Context, agent *Agent) (*Agent, error) {
+	return c.GetOrCreateAgent(ctx, agent)
 }

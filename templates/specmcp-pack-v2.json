@@ -1,6 +1,6 @@
 {
   "name": "SpecMCP",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Spec-driven development workflow template pack. Defines entity types and relationships for managing specifications, requirements, scenarios, tasks, patterns, and codebase structure in a knowledge graph.",
   "author": "Diane",
   "object_type_schemas": [
@@ -30,8 +30,8 @@
       }
     },
     {
-      "name": "CodingAgent",
-      "description": "A developer or AI agent who implements tasks. Tracks skills, specialization, and velocity for task assignment.",
+      "name": "Agent",
+      "description": "An agent (human or AI) that performs tasks. Supports multiple agent types: coding, maintenance, research, testing, deployment, and analysis.",
       "properties": {
         "name": {
           "type": "string",
@@ -68,7 +68,8 @@
             "backend",
             "fullstack",
             "testing",
-            "devops"
+            "devops",
+            "maintenance"
           ],
           "description": "Primary area of expertise"
         },
@@ -87,6 +88,19 @@
             "type": "string"
           },
           "description": "Namespaced tags"
+        },
+        "agent_type": {
+          "type": "string",
+          "enum": [
+            "coding",
+            "maintenance",
+            "research",
+            "testing",
+            "deployment",
+            "analysis"
+          ],
+          "description": "The type of agent: coding (implements features), maintenance (janitor/cleanup), research (investigates/explores), testing (QA/validation), deployment (CI/CD/ops), analysis (code analysis/metrics)",
+          "default": "coding"
         }
       }
     },
@@ -1030,7 +1044,7 @@
         },
         "proposed_by": {
           "type": "string",
-          "description": "CodingAgent name who proposed this"
+          "description": "Agent name who proposed this"
         },
         "tags": {
           "type": "array",
@@ -1385,7 +1399,7 @@
         "Task"
       ],
       "targetTypes": [
-        "CodingAgent"
+        "Agent"
       ]
     },
     {
@@ -1469,7 +1483,7 @@
         "Action"
       ],
       "targetTypes": [
-        "CodingAgent"
+        "Agent"
       ]
     },
     {
@@ -1589,7 +1603,7 @@
         "Improvement"
       ],
       "targetTypes": [
-        "CodingAgent"
+        "Agent"
       ]
     },
     {

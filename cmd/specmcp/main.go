@@ -184,7 +184,7 @@ func run() error {
 	registry.Register(gosync.NewGraphSummary(emFactory))
 
 	// Register janitor tool
-	registry.Register(janitor.NewJanitorRun(emFactory, logger))
+	registry.Register(janitor.NewJanitorRun(emFactory, logger, cfg.Janitor))
 
 	// Register prompts (actionable - gather info or kick off workflows)
 	registry.RegisterPrompt(&content.CreateConstitutionPrompt{})
@@ -208,7 +208,7 @@ func run() error {
 	var sched *scheduler.Scheduler
 	if cfg.Janitor.Enabled && cfg.Transport.Mode == "stdio" {
 		sched = scheduler.NewScheduler(logger)
-		janitorJob := janitor.NewJanitorJob(emFactory, logger, cfg.Emergent.Token)
+		janitorJob := janitor.NewJanitorJob(emFactory, logger, cfg.Emergent.Token, cfg.Janitor)
 		interval := time.Duration(cfg.Janitor.IntervalHours) * time.Hour
 		sched.AddJob(janitorJob, interval)
 		sched.Start(ctx)

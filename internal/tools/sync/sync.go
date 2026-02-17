@@ -135,7 +135,7 @@ func (t *GraphSummary) Execute(ctx context.Context, params json.RawMessage) (*mc
 		emergent.TypeChange, emergent.TypeProposal, emergent.TypeSpec,
 		emergent.TypeRequirement, emergent.TypeScenario, emergent.TypeScenarioStep,
 		emergent.TypeDesign, emergent.TypeTask, emergent.TypeActor,
-		emergent.TypeCodingAgent, emergent.TypePattern, emergent.TypeConstitution,
+		emergent.TypeCodingAgent, emergent.TypeAgent, emergent.TypePattern, emergent.TypeConstitution,
 		emergent.TypeTestCase, emergent.TypeAPIContract, emergent.TypeContext,
 		emergent.TypeUIComponent, emergent.TypeAction, emergent.TypeDataModel,
 		emergent.TypeApp, emergent.TypeGraphSync,

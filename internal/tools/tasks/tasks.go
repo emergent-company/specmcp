@@ -432,14 +432,14 @@ func NewAssignTask(factory *emergent.ClientFactory) *AssignTask {
 
 func (t *AssignTask) Name() string { return "spec_assign_task" }
 func (t *AssignTask) Description() string {
-	return "Assign a task to a CodingAgent. Updates task status to in_progress and creates assigned_to relationship."
+	return "Assign a task to an Agent. Updates task status to in_progress and creates assigned_to relationship."
 }
 func (t *AssignTask) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
     "task_id": {"type": "string", "description": "ID of the task to assign"},
-    "agent_id": {"type": "string", "description": "ID of the CodingAgent to assign to"}
+    "agent_id": {"type": "string", "description": "ID of the Agent to assign to"}
   },
   "required": ["task_id", "agent_id"]
 }`)

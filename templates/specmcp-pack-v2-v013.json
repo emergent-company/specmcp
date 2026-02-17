@@ -1,12 +1,15 @@
 {
   "name": "SpecMCP",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Spec-driven development workflow template pack. Defines entity types and relationships for managing specifications, requirements, scenarios, tasks, patterns, and codebase structure in a knowledge graph.",
   "author": "Diane",
-  "object_type_schemas": [
-    {
-      "name": "Actor",
+  "object_type_schemas": {
+    "Actor": {
+      "type": "object",
       "description": "A user, role, or persona who interacts with the system. Used in scenarios to describe who performs actions.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -29,9 +32,13 @@
         }
       }
     },
-    {
-      "name": "CodingAgent",
-      "description": "A developer or AI agent who implements tasks. Tracks skills, specialization, and velocity for task assignment.",
+    "Agent": {
+      "type": "object",
+      "description": "An agent (human or AI) that performs tasks. Supports multiple agent types: coding, maintenance, research, testing, deployment, and analysis.",
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -68,7 +75,8 @@
             "backend",
             "fullstack",
             "testing",
-            "devops"
+            "devops",
+            "maintenance"
           ],
           "description": "Primary area of expertise"
         },
@@ -87,12 +95,29 @@
             "type": "string"
           },
           "description": "Namespaced tags"
+        },
+        "agent_type": {
+          "type": "string",
+          "enum": [
+            "coding",
+            "maintenance",
+            "research",
+            "testing",
+            "deployment",
+            "analysis"
+          ],
+          "description": "The type of agent: coding (implements features), maintenance (janitor/cleanup), research (investigates/explores), testing (QA/validation), deployment (CI/CD/ops), analysis (code analysis/metrics)",
+          "default": "coding"
         }
       }
     },
-    {
-      "name": "Pattern",
+    "Pattern": {
+      "type": "object",
       "description": "A reusable implementation pattern discovered in or applied to the codebase. Patterns can be core (built-in) or project-specific.",
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -145,9 +170,13 @@
         }
       }
     },
-    {
-      "name": "Constitution",
+    "Constitution": {
+      "type": "object",
       "description": "Project-wide non-negotiable principles that all Changes must adhere to. Encodes architectural patterns, security guardrails, and testing requirements.",
+      "required": [
+        "name",
+        "version"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -199,9 +228,13 @@
         }
       }
     },
-    {
-      "name": "Change",
+    "Change": {
+      "type": "object",
       "description": "Container for a feature, bug fix, or refactoring effort. Contains four artifacts: Proposal (why), Specs (what), Design (how), Tasks (steps).",
+      "required": [
+        "name",
+        "status"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -228,9 +261,12 @@
         }
       }
     },
-    {
-      "name": "Proposal",
+    "Proposal": {
+      "type": "object",
       "description": "The intent of a change: why we're doing this and what's in scope. Does NOT contain requirements (those go in Specs).",
+      "required": [
+        "intent"
+      ],
       "properties": {
         "intent": {
           "type": "string",
@@ -253,9 +289,12 @@
         }
       }
     },
-    {
-      "name": "Spec",
+    "Spec": {
+      "type": "object",
       "description": "A domain-specific specification container (e.g. auth, payments, ui). Contains requirements and their scenarios.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -287,9 +326,13 @@
         }
       }
     },
-    {
-      "name": "Requirement",
+    "Requirement": {
+      "type": "object",
       "description": "A specific behavior the system must have. Lives under a Spec. Uses RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).",
+      "required": [
+        "name",
+        "description"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -327,9 +370,12 @@
         }
       }
     },
-    {
-      "name": "Scenario",
+    "Scenario": {
+      "type": "object",
       "description": "A concrete example of a requirement in action. Testable \u2014 you could write an automated test for each scenario.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -367,9 +413,13 @@
         }
       }
     },
-    {
-      "name": "ScenarioStep",
+    "ScenarioStep": {
+      "type": "object",
       "description": "A step in a complex scenario that needs step-by-step breakdown. Optional \u2014 simple scenarios may not need steps.",
+      "required": [
+        "sequence",
+        "description"
+      ],
       "properties": {
         "sequence": {
           "type": "integer",
@@ -389,8 +439,8 @@
         }
       }
     },
-    {
-      "name": "Design",
+    "Design": {
+      "type": "object",
       "description": "Technical approach and architecture decisions for a change.",
       "properties": {
         "approach": {
@@ -421,9 +471,14 @@
         }
       }
     },
-    {
-      "name": "Task",
+    "Task": {
+      "type": "object",
       "description": "An implementation task with tracking, dependency management, and artifact production.",
+      "required": [
+        "number",
+        "description",
+        "status"
+      ],
       "properties": {
         "number": {
           "type": "string",
@@ -506,9 +561,12 @@
         }
       }
     },
-    {
-      "name": "TestCase",
+    "TestCase": {
+      "type": "object",
       "description": "Links scenarios to executable test files for validation. Enables CI integration and verification.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -563,9 +621,13 @@
         }
       }
     },
-    {
-      "name": "APIContract",
+    "APIContract": {
+      "type": "object",
       "description": "Machine-readable API definition that complements human-readable Specs. Addresses the AI-API gap.",
+      "required": [
+        "name",
+        "format"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -627,9 +689,12 @@
         }
       }
     },
-    {
-      "name": "Context",
+    "Context": {
+      "type": "object",
       "description": "A screen, modal, panel, or interaction surface in the application. Extracted from codebase during sync.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -682,9 +747,12 @@
         }
       }
     },
-    {
-      "name": "UIComponent",
+    "UIComponent": {
+      "type": "object",
       "description": "A reusable UI component. Extracted from codebase during sync.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -721,9 +789,12 @@
         }
       }
     },
-    {
-      "name": "Action",
+    "Action": {
+      "type": "object",
       "description": "A user action or system operation (navigation, mutation, trigger, etc.).",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -761,9 +832,13 @@
         }
       }
     },
-    {
-      "name": "App",
+    "App": {
+      "type": "object",
       "description": "A deployable application in the monorepo. Can be frontend, backend, desktop, mobile, CLI tool, or library.",
+      "required": [
+        "name",
+        "app_type"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -839,9 +914,12 @@
         }
       }
     },
-    {
-      "name": "DataModel",
+    "DataModel": {
+      "type": "object",
       "description": "A domain data type shared across the system. Can be defined in one app and consumed by others.",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -904,9 +982,12 @@
         }
       }
     },
-    {
-      "name": "GraphSync",
+    "GraphSync": {
+      "type": "object",
       "description": "Tracks synchronization state between the Emergent graph and the codebase.",
+      "required": [
+        "status"
+      ],
       "properties": {
         "last_synced_commit": {
           "type": "string",
@@ -936,9 +1017,18 @@
         }
       }
     },
-    {
-      "name": "Improvement",
+    "Improvement": {
+      "type": "object",
       "description": "Lightweight improvement idea that doesn't require full Change workflow. Can have tasks as checklist items. Used for small enhancements, refactoring, tech debt, and quick wins.",
+      "required": [
+        "title",
+        "description",
+        "domain",
+        "type",
+        "status",
+        "proposed_by",
+        "proposed_at"
+      ],
       "properties": {
         "title": {
           "type": "string",
@@ -1030,7 +1120,7 @@
         },
         "proposed_by": {
           "type": "string",
-          "description": "CodingAgent name who proposed this"
+          "description": "Agent name who proposed this"
         },
         "tags": {
           "type": "array",
@@ -1068,9 +1158,15 @@
         }
       }
     },
-    {
-      "name": "MaintenanceIssue",
+    "MaintenanceIssue": {
+      "type": "object",
       "description": "A data integrity or compliance problem detected by the janitor agent. Unlike feature Changes, these are reactive maintenance items that restore graph health.",
+      "required": [
+        "title",
+        "description",
+        "severity",
+        "status"
+      ],
       "properties": {
         "title": {
           "type": "string",
@@ -1137,20 +1233,19 @@
         }
       }
     }
-  ],
-  "relationship_type_schemas": [
-    {
-      "name": "inherits_from",
+  },
+  "relationship_type_schemas": {
+    "inherits_from": {
       "description": "Actor inherits permissions and capabilities from another actor",
       "sourceTypes": [
         "Actor"
       ],
       "targetTypes": [
         "Actor"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "uses_pattern",
+    "uses_pattern": {
       "description": "Entity uses a reusable implementation pattern",
       "sourceTypes": [
         "App",
@@ -1161,50 +1256,50 @@
       ],
       "targetTypes": [
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "extends_pattern",
+    "extends_pattern": {
       "description": "Project-specific pattern extends a core pattern",
       "sourceTypes": [
         "Pattern"
       ],
       "targetTypes": [
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "has_proposal",
+    "has_proposal": {
       "description": "Change has a proposal describing intent, scope, and impact",
       "sourceTypes": [
         "Change"
       ],
       "targetTypes": [
         "Proposal"
-      ]
+      ],
+      "cardinality": "one-to-one"
     },
-    {
-      "name": "has_spec",
+    "has_spec": {
       "description": "Change has a domain-specific specification",
       "sourceTypes": [
         "Change"
       ],
       "targetTypes": [
         "Spec"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "has_design",
+    "has_design": {
       "description": "Change has a technical design",
       "sourceTypes": [
         "Change"
       ],
       "targetTypes": [
         "Design"
-      ]
+      ],
+      "cardinality": "one-to-one"
     },
-    {
-      "name": "has_task",
+    "has_task": {
       "description": "Parent entity has an implementation task",
       "sourceTypes": [
         "Change",
@@ -1212,160 +1307,162 @@
       ],
       "targetTypes": [
         "Task"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "has_requirement",
+    "has_requirement": {
       "description": "Spec contains a requirement",
       "sourceTypes": [
         "Spec"
       ],
       "targetTypes": [
         "Requirement"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "has_scenario",
+    "has_scenario": {
       "description": "Requirement has a concrete scenario example",
       "sourceTypes": [
         "Requirement"
       ],
       "targetTypes": [
         "Scenario"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "executed_by",
+    "executed_by": {
       "description": "Scenario is executed by an actor",
       "sourceTypes": [
         "Scenario"
       ],
       "targetTypes": [
         "Actor"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "has_step",
+    "has_step": {
       "description": "Scenario has an ordered step",
       "sourceTypes": [
         "Scenario"
       ],
       "targetTypes": [
         "ScenarioStep"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "variant_of",
+    "variant_of": {
       "description": "Scenario is an alternative path of another scenario",
       "sourceTypes": [
         "Scenario"
       ],
       "targetTypes": [
         "Scenario"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "occurs_in",
+    "occurs_in": {
       "description": "Scenario step occurs in a context (screen, modal, etc.)",
       "sourceTypes": [
         "ScenarioStep"
       ],
       "targetTypes": [
         "Context"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "performs",
+    "performs": {
       "description": "Scenario step performs an action",
       "sourceTypes": [
         "ScenarioStep"
       ],
       "targetTypes": [
         "Action"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "composed_of",
+    "composed_of": {
       "description": "UI component is composed of child components",
       "sourceTypes": [
         "UIComponent"
       ],
       "targetTypes": [
         "UIComponent"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "uses_component",
+    "uses_component": {
       "description": "Context uses a UI component",
       "sourceTypes": [
         "Context"
       ],
       "targetTypes": [
         "UIComponent"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "nested_in",
+    "nested_in": {
       "description": "Context is nested inside another context (e.g. modal inside screen)",
       "sourceTypes": [
         "Context"
       ],
       "targetTypes": [
         "Context"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "available_in",
+    "available_in": {
       "description": "Action is available in a context",
       "sourceTypes": [
         "Action"
       ],
       "targetTypes": [
         "Context"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "navigates_to",
+    "navigates_to": {
       "description": "Action navigates to a target context",
       "sourceTypes": [
         "Action"
       ],
       "targetTypes": [
         "Context"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "has_subtask",
+    "has_subtask": {
       "description": "Task has a subtask",
       "sourceTypes": [
         "Task"
       ],
       "targetTypes": [
         "Task"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "blocks",
+    "blocks": {
       "description": "Task blocks another task (dependency). Emergent auto-creates inverse 'blocked_by'.",
       "sourceTypes": [
         "Task"
       ],
       "targetTypes": [
         "Task"
-      ]
+      ],
+      "cardinality": "many-to-many",
+      "inverseType": "blocked_by"
     },
-    {
-      "name": "blocked_by",
+    "blocked_by": {
       "description": "Task is blocked by another task (auto-created inverse of 'blocks')",
       "sourceTypes": [
         "Task"
       ],
       "targetTypes": [
         "Task"
-      ]
+      ],
+      "cardinality": "many-to-many",
+      "inverseType": "blocks"
     },
-    {
-      "name": "implements",
+    "implements": {
       "description": "Task implements an entity (spec, context, component, action, or pattern)",
       "sourceTypes": [
         "Task"
@@ -1376,80 +1473,80 @@
         "UIComponent",
         "Action",
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "assigned_to",
+    "assigned_to": {
       "description": "Task is assigned to a coding agent",
       "sourceTypes": [
         "Task"
       ],
       "targetTypes": [
-        "CodingAgent"
-      ]
+        "Agent"
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "governed_by",
+    "governed_by": {
       "description": "Change must adhere to a constitution",
       "sourceTypes": [
         "Change"
       ],
       "targetTypes": [
         "Constitution"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "requires_pattern",
+    "requires_pattern": {
       "description": "Constitution mandates the use of a pattern",
       "sourceTypes": [
         "Constitution"
       ],
       "targetTypes": [
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "forbids_pattern",
+    "forbids_pattern": {
       "description": "Constitution forbids the use of a pattern",
       "sourceTypes": [
         "Constitution"
       ],
       "targetTypes": [
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "tested_by",
+    "tested_by": {
       "description": "Scenario is validated by a test case",
       "sourceTypes": [
         "Scenario"
       ],
       "targetTypes": [
         "TestCase"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "tests",
+    "tests": {
       "description": "Test case validates a scenario",
       "sourceTypes": [
         "TestCase"
       ],
       "targetTypes": [
         "Scenario"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "has_contract",
+    "has_contract": {
       "description": "Spec has a machine-readable API contract",
       "sourceTypes": [
         "Spec"
       ],
       "targetTypes": [
         "APIContract"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "implements_contract",
+    "implements_contract": {
       "description": "Entity implements an API contract endpoint",
       "sourceTypes": [
         "Context",
@@ -1457,10 +1554,10 @@
       ],
       "targetTypes": [
         "APIContract"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "owned_by",
+    "owned_by": {
       "description": "Entity is owned/maintained by a coding agent",
       "sourceTypes": [
         "Spec",
@@ -1469,11 +1566,11 @@
         "Action"
       ],
       "targetTypes": [
-        "CodingAgent"
-      ]
+        "Agent"
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "belongs_to_app",
+    "belongs_to_app": {
       "description": "Entity belongs to an app (implementation artifact owned by app)",
       "sourceTypes": [
         "Context",
@@ -1483,10 +1580,10 @@
       ],
       "targetTypes": [
         "App"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "scoped_to_app",
+    "scoped_to_app": {
       "description": "Workflow artifact or improvement affects or is scoped to specific app(s)",
       "sourceTypes": [
         "Change",
@@ -1498,50 +1595,50 @@
       ],
       "targetTypes": [
         "App"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "depends_on_app",
+    "depends_on_app": {
       "description": "App depends on another app at runtime (e.g. frontend calls backend API)",
       "sourceTypes": [
         "App"
       ],
       "targetTypes": [
         "App"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "provides_model",
+    "provides_model": {
       "description": "App owns and defines a DataModel (source of truth)",
       "sourceTypes": [
         "App"
       ],
       "targetTypes": [
         "DataModel"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "consumes_model",
+    "consumes_model": {
       "description": "App uses a DataModel from another app (consumer)",
       "sourceTypes": [
         "App"
       ],
       "targetTypes": [
         "DataModel"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "exposes_api",
+    "exposes_api": {
       "description": "App exposes an API contract for external consumption",
       "sourceTypes": [
         "App"
       ],
       "targetTypes": [
         "APIContract"
-      ]
+      ],
+      "cardinality": "one-to-many"
     },
-    {
-      "name": "affects_entity",
+    "affects_entity": {
       "description": "Issue or improvement affects a specific entity",
       "sourceTypes": [
         "MaintenanceIssue",
@@ -1559,60 +1656,61 @@
         "UIComponent",
         "Action",
         "Pattern"
-      ]
+      ],
+      "cardinality": "many-to-many"
     },
-    {
-      "name": "parent_issue",
+    "parent_issue": {
       "description": "MaintenanceIssue is part of a larger parent issue (for grouping related problems)",
       "sourceTypes": [
         "MaintenanceIssue"
       ],
       "targetTypes": [
         "MaintenanceIssue"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "resolved_by_change",
+    "resolved_by_change": {
       "description": "MaintenanceIssue was resolved by implementing a Change (if code changes were needed)",
       "sourceTypes": [
         "MaintenanceIssue"
       ],
       "targetTypes": [
         "Change"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "proposed_by",
+    "proposed_by": {
       "description": "Entity was proposed/detected by a coding agent",
       "sourceTypes": [
         "MaintenanceIssue",
         "Improvement"
       ],
       "targetTypes": [
-        "CodingAgent"
-      ]
+        "Agent"
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "promoted_to_change",
+    "promoted_to_change": {
       "description": "Improvement was promoted to a formal Change",
       "sourceTypes": [
         "Improvement"
       ],
       "targetTypes": [
         "Change"
-      ]
+      ],
+      "cardinality": "many-to-one"
     },
-    {
-      "name": "superseded_by",
+    "superseded_by": {
       "description": "Improvement was superseded by a better/newer improvement",
       "sourceTypes": [
         "Improvement"
       ],
       "targetTypes": [
         "Improvement"
-      ]
+      ],
+      "cardinality": "many-to-one"
     }
-  ],
+  },
   "ui_configs": {},
   "extraction_prompts": {}
 }

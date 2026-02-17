@@ -27,7 +27,8 @@ const (
 
 	// Supporting entities
 	TypeActor            = "Actor"
-	TypeCodingAgent      = "CodingAgent"
+	TypeAgent            = "Agent"
+	TypeCodingAgent      = "CodingAgent" // Deprecated: use TypeAgent. Kept for migration scripts.
 	TypePattern          = "Pattern"
 	TypeConstitution     = "Constitution"
 	TypeGraphSync        = "GraphSync"
@@ -79,8 +80,8 @@ const (
 	// Actor and agent relationships
 	RelInheritsFrom = "inherits_from" // Actor → Actor
 	RelExecutedBy   = "executed_by"   // Scenario → Actor
-	RelAssignedTo   = "assigned_to"   // Task → CodingAgent
-	RelOwnedBy      = "owned_by"      // Entity → CodingAgent
+	RelAssignedTo   = "assigned_to"   // Task → Agent
+	RelOwnedBy      = "owned_by"      // Entity → Agent
 	RelGovernedBy   = "governed_by"   // Change → Constitution
 
 	// Task and scenario relationships
@@ -99,7 +100,7 @@ const (
 	RelAffectsEntity    = "affects_entity"     // MaintenanceIssue → Entity (links to entities with problems)
 	RelParentIssue      = "parent_issue"       // MaintenanceIssue → MaintenanceIssue (groups related issues)
 	RelResolvedByChange = "resolved_by_change" // MaintenanceIssue → Change (if fix requires code changes)
-	RelProposedBy       = "proposed_by"        // MaintenanceIssue → CodingAgent (janitor agent)
+	RelProposedBy       = "proposed_by"        // MaintenanceIssue/Improvement → Agent (janitor agent)
 )
 
 // Status constants for Change and Task entities.
@@ -235,12 +236,14 @@ type Actor struct {
 	Tags        []string `json:"tags,omitempty"`
 }
 
-// CodingAgent represents a developer or AI agent.
-type CodingAgent struct {
+// Agent represents a developer or AI agent. Supports multiple agent types:
+// coding, maintenance, research, testing, deployment, analysis.
+type Agent struct {
 	ID                  string   `json:"id,omitempty"`
 	Name                string   `json:"name"`
 	DisplayName         string   `json:"display_name,omitempty"`
 	Type                string   `json:"type"`
+	AgentType           string   `json:"agent_type,omitempty"` // coding, maintenance, research, testing, deployment, analysis
 	Active              bool     `json:"active"`
 	Skills              []string `json:"skills,omitempty"`
 	Specialization      string   `json:"specialization,omitempty"`
@@ -248,6 +251,9 @@ type CodingAgent struct {
 	VelocityPointsPerHr float64  `json:"velocity_points_per_hour,omitempty"`
 	Tags                []string `json:"tags,omitempty"`
 }
+
+// CodingAgent is a deprecated alias for Agent. Use Agent instead.
+type CodingAgent = Agent
 
 // Pattern represents a reusable implementation pattern.
 type Pattern struct {
@@ -410,7 +416,7 @@ type Improvement struct {
 	ProposedAt  *time.Time `json:"proposed_at,omitempty"`
 	PlannedAt   *time.Time `json:"planned_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	ProposedBy  string     `json:"proposed_by"` // CodingAgent name
+	ProposedBy  string     `json:"proposed_by"` // Agent name who proposed this
 	Tags        []string   `json:"tags,omitempty"`
 
 	// Knowledge contribution fields (used for constitution_rule, pattern_proposal, technology_choice, best_practice)

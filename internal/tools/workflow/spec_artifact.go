@@ -122,8 +122,8 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return t.addScenarioStep(ctx, client, p.Content)
 	case "actor":
 		return t.addGenericEntity(ctx, client, emergent.TypeActor, p.Content, nil, p.ChangeID)
-	case "coding_agent":
-		return t.addGenericEntity(ctx, client, emergent.TypeCodingAgent, p.Content, nil, p.ChangeID)
+	case "coding_agent", "agent":
+		return t.addGenericEntity(ctx, client, emergent.TypeAgent, p.Content, nil, p.ChangeID)
 	case "pattern":
 		return t.addGenericEntity(ctx, client, emergent.TypePattern, p.Content, nil, p.ChangeID)
 	case "test_case":

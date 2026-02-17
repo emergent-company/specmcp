@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -57,9 +58,11 @@ type LogConfig struct {
 
 // JanitorConfig holds janitor scheduling configuration.
 type JanitorConfig struct {
-	Enabled        bool `toml:"enabled"`         // Enable scheduled janitor runs
-	IntervalHours  int  `toml:"interval_hours"`  // How often to run (in hours)
-	CreateProposal bool `toml:"create_proposal"` // Auto-create proposals for critical issues
+	Enabled               bool     `toml:"enabled"`                // Enable scheduled janitor runs
+	IntervalHours         int      `toml:"interval_hours"`         // How often to run (in hours)
+	CreateProposal        bool     `toml:"create_proposal"`        // Auto-create proposals for critical issues
+	CreateImprovements    bool     `toml:"create_improvements"`    // Auto-create Improvement entities from findings
+	ImprovementThresholds []string `toml:"improvement_thresholds"` // Severity levels that trigger improvements: ["critical", "warning"]
 }
 
 // Load creates a Config by reading from a TOML config file and environment
@@ -98,9 +101,11 @@ func Load(configPath string) (*Config, error) {
 			Level: "info",
 		},
 		Janitor: JanitorConfig{
-			Enabled:        false, // Disabled by default
-			IntervalHours:  1,     // Run every hour when enabled
-			CreateProposal: false, // Don't auto-create proposals by default
+			Enabled:               false,                           // Disabled by default
+			IntervalHours:         1,                               // Run every hour when enabled
+			CreateProposal:        false,                           // Don't auto-create proposals by default
+			CreateImprovements:    false,                           // Don't auto-create improvements by default
+			ImprovementThresholds: []string{"critical", "warning"}, // When enabled, create improvements for critical and warning issues
 		},
 	}
 
@@ -229,6 +234,16 @@ func (c *Config) applyEnv() {
 	if v := os.Getenv("SPECMCP_JANITOR_CREATE_PROPOSAL"); v != "" {
 		c.Janitor.CreateProposal = (v == "true" || v == "1")
 	}
+	if v := os.Getenv("SPECMCP_JANITOR_CREATE_IMPROVEMENTS"); v != "" {
+		c.Janitor.CreateImprovements = (v == "true" || v == "1")
+	}
+	if v := os.Getenv("SPECMCP_JANITOR_IMPROVEMENT_THRESHOLDS"); v != "" {
+		// Comma-separated list of severity levels, e.g. "critical,warning"
+		parts := splitAndTrim(v)
+		if len(parts) > 0 {
+			c.Janitor.ImprovementThresholds = parts
+		}
+	}
 }
 
 // Validate checks that required fields are present.
@@ -257,4 +272,17 @@ func envOverride(key string, dst *string) {
 	if v := os.Getenv(key); v != "" {
 		*dst = v
 	}
+}
+
+// splitAndTrim splits a comma-separated string and trims whitespace from each part.
+func splitAndTrim(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }

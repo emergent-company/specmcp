@@ -192,7 +192,7 @@ Implementable step with tracking.
   - blocked_by → Task (auto-created)
   - has_subtask → Task
   - implements → Requirement
-  - assigned_to → CodingAgent
+  - assigned_to → Agent
 
 ### Actor
 User role or persona.
@@ -201,9 +201,9 @@ User role or persona.
   - performs → Action
   - occurs_in → Context
 
-### CodingAgent
+### Agent
 Developer or AI agent that works on tasks.
-- **Properties**: name (string, required), display_name (string), type (string: human/ai, required), active (bool, required), skills ([]string), specialization (string), instructions (string), velocity_points_per_hour (float), tags ([]string)
+- **Properties**: name (string, required), display_name (string), type (string: human/ai, required), agent_type (string: coding/maintenance/research/testing/deployment/analysis), active (bool, required), skills ([]string), specialization (string), instructions (string), velocity_points_per_hour (float), tags ([]string)
 
 ### Pattern
 Reusable implementation convention.
@@ -269,7 +269,7 @@ Tracks synchronization state between graph and codebase.
 | blocked_by | Task | Task | Yes → blocks |
 | has_subtask | Task | Task | No |
 | implements | Task | Requirement | No |
-| assigned_to | Task | CodingAgent | No |
+| assigned_to | Task | Agent | No |
 | governed_by | Change | Constitution | No |
 | requires_pattern | Constitution | Pattern | No |
 | forbids_pattern | Constitution | Pattern | No |
@@ -440,7 +440,7 @@ SpecMCP uses 18 entity types and 30+ relationship types. Key entities:
 | **Action** | User action or system operation |
 | **TestCase** | Executable test linked to a scenario |
 | **APIContract** | Machine-readable API definition |
-| **CodingAgent** | Developer or AI agent |
+| **Agent** | Developer or AI agent |
 
 ## Monorepo Support
 

@@ -97,3 +97,14 @@
 # When false, the janitor only logs issues.
 # Env: SPECMCP_JANITOR_CREATE_PROPOSAL
 # create_proposal = false
+
+# Automatically create Improvement entities from janitor findings.
+# Improvements are grouped by issue type (naming, orphaned, missing relationships, etc.)
+# with individual Tasks for each specific issue.
+# Env: SPECMCP_JANITOR_CREATE_IMPROVEMENTS
+# create_improvements = false
+
+# Severity levels that trigger improvement creation (comma-separated).
+# Only issues at these levels will generate Improvements.
+# Env: SPECMCP_JANITOR_IMPROVEMENT_THRESHOLDS
+# improvement_thresholds = ["critical", "warning"]

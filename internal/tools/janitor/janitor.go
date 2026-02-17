@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/emergent-company/emergent/apps/server-go/pkg/sdk/graph"
+	"github.com/emergent-company/specmcp/internal/config"
 	"github.com/emergent-company/specmcp/internal/emergent"
 	"github.com/emergent-company/specmcp/internal/mcp"
 )
@@ -40,21 +41,27 @@ type Report struct {
 // --- spec_janitor_run ---
 
 type janitorRunParams struct {
-	CreateProposal bool   `json:"create_proposal,omitempty"`
-	Scope          string `json:"scope,omitempty"` // "all", "changes", "artifacts"
-	AutoFix        bool   `json:"auto_fix,omitempty"`
+	CreateProposal     bool   `json:"create_proposal,omitempty"`
+	CreateImprovements bool   `json:"create_improvements,omitempty"` // Create Improvement entities grouped by issue type
+	Scope              string `json:"scope,omitempty"`               // "all", "changes", "artifacts"
+	AutoFix            bool   `json:"auto_fix,omitempty"`
 }
 
 type JanitorRun struct {
 	factory *emergent.ClientFactory
 	logger  *slog.Logger
+	cfg     config.JanitorConfig
 }
 
-func NewJanitorRun(factory *emergent.ClientFactory, logger *slog.Logger) *JanitorRun {
-	return &JanitorRun{
+func NewJanitorRun(factory *emergent.ClientFactory, logger *slog.Logger, cfg ...config.JanitorConfig) *JanitorRun {
+	jr := &JanitorRun{
 		factory: factory,
 		logger:  logger,
 	}
+	if len(cfg) > 0 {
+		jr.cfg = cfg[0]
+	}
+	return jr
 }
 
 func (t *JanitorRun) Name() string { return "spec_janitor_run" }
@@ -79,6 +86,10 @@ func (t *JanitorRun) InputSchema() json.RawMessage {
     "create_proposal": {
       "type": "boolean",
       "description": "If true and critical issues are found, create a maintenance proposal"
+    },
+    "create_improvements": {
+      "type": "boolean",
+      "description": "If true, create Improvement entities grouped by issue type with subtask Tasks for each specific issue"
     },
     "scope": {
       "type": "string",
@@ -110,7 +121,7 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 
 	t.logger.Info("starting janitor run", "scope", p.Scope, "create_proposal", p.CreateProposal)
 
-	// Ensure the janitor CodingAgent exists in the graph
+	// Ensure the janitor Agent exists in the graph
 	janitorAgent, err := t.ensureJanitorAgent(ctx, client)
 	if err != nil {
 		t.logger.Warn("failed to ensure janitor agent exists", "error", err)
@@ -175,6 +186,28 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		}
 	}
 
+	// Create Improvement entities if requested (or if config enables it)
+	shouldCreateImprovements := p.CreateImprovements || t.cfg.CreateImprovements
+	var improvements []improvementResult
+	if shouldCreateImprovements && report.IssuesFound > 0 {
+		var janitorAgentID string
+		if janitorAgent != nil {
+			janitorAgentID = janitorAgent.ID
+		}
+		thresholds := t.cfg.ImprovementThresholds
+		if len(thresholds) == 0 {
+			thresholds = []string{"critical", "warning"} // default
+		}
+		improvements, err = t.createImprovements(ctx, client, report, janitorAgentID, thresholds)
+		if err != nil {
+			t.logger.Error("error creating improvements", "error", err)
+		} else {
+			t.logger.Info("created improvements from janitor findings",
+				"improvement_count", len(improvements),
+				"total_tasks", countImprovementTasks(improvements))
+		}
+	}
+
 	result := map[string]any{
 		"report": report,
 	}
@@ -182,6 +215,11 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		result["proposal_id"] = proposalID
 		result["message"] = fmt.Sprintf("Found %d critical issues. Maintenance proposal created: %s",
 			report.CriticalIssues, proposalID)
+	} else if len(improvements) > 0 {
+		result["improvements"] = improvements
+		result["message"] = fmt.Sprintf("Janitor run complete. Found %d issues (%d critical, %d warnings). Created %d improvements with %d tasks.",
+			report.IssuesFound, report.CriticalIssues, report.Warnings,
+			len(improvements), countImprovementTasks(improvements))
 	} else {
 		result["message"] = fmt.Sprintf("Janitor run complete. Found %d issues (%d critical, %d warnings)",
 			report.IssuesFound, report.CriticalIssues, report.Warnings)
@@ -490,6 +528,202 @@ Fixing these issues will improve the consistency and reliability of the knowledg
 	return proposal, nil
 }
 
+// improvementResult tracks what was created for a given issue type.
+type improvementResult struct {
+	ImprovementID string   `json:"improvement_id"`
+	IssueType     string   `json:"issue_type"`
+	Title         string   `json:"title"`
+	IssueCount    int      `json:"issue_count"`
+	TaskIDs       []string `json:"task_ids"`
+}
+
+// issueTypeConfig maps issue types to human-readable titles, domains, and improvement types.
+var issueTypeConfig = map[string]struct {
+	title           string
+	domain          string
+	improvementType string
+	priority        string
+	effort          string
+}{
+	"naming_convention":    {"Fix naming convention violations", "infrastructure", "cleanup", "medium", "small"},
+	"orphaned_entity":      {"Connect orphaned entities to Changes", "infrastructure", "cleanup", "medium", "medium"},
+	"missing_relationship": {"Add missing required relationships", "infrastructure", "tech_debt", "high", "small"},
+	"stale_change":         {"Archive or complete stale changes", "infrastructure", "cleanup", "low", "trivial"},
+	"empty_change":         {"Add artifacts to empty changes or archive them", "infrastructure", "cleanup", "low", "trivial"},
+	"invalid_state":        {"Fix invalid readiness states", "infrastructure", "bug_fix", "critical", "small"},
+}
+
+// createImprovements creates Improvement entities grouped by issue type.
+// Each Improvement gets subtask Tasks for each specific issue in that group.
+// Only issues matching the threshold severity levels are included.
+func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Client, report *Report, janitorAgentID string, thresholds []string) ([]improvementResult, error) {
+	// Build threshold set for fast lookup
+	thresholdSet := make(map[string]bool, len(thresholds))
+	for _, th := range thresholds {
+		thresholdSet[th] = true
+	}
+
+	// Group issues by type, filtering by severity threshold
+	issuesByType := make(map[string][]Issue)
+	for _, issue := range report.Issues {
+		if thresholdSet[issue.Severity] {
+			issuesByType[issue.Type] = append(issuesByType[issue.Type], issue)
+		}
+	}
+
+	if len(issuesByType) == 0 {
+		t.logger.Info("no issues match improvement thresholds", "thresholds", thresholds)
+		return nil, nil
+	}
+
+	now := time.Now()
+	var results []improvementResult
+
+	for issueType, issues := range issuesByType {
+		cfg, ok := issueTypeConfig[issueType]
+		if !ok {
+			// Unknown issue type, use defaults
+			cfg = struct {
+				title           string
+				domain          string
+				improvementType string
+				priority        string
+				effort          string
+			}{
+				title:           fmt.Sprintf("Fix %s issues", issueType),
+				domain:          "infrastructure",
+				improvementType: "cleanup",
+				priority:        "medium",
+				effort:          "medium",
+			}
+		}
+
+		// Create Improvement entity
+		title := fmt.Sprintf("%s (%d issues)", cfg.title, len(issues))
+		key := fmt.Sprintf("janitor-%s-%s", issueType, now.Format("20060102-150405"))
+
+		description := t.buildImprovementDescription(issueType, issues)
+
+		improvementProps := map[string]any{
+			"title":       title,
+			"description": description,
+			"domain":      cfg.domain,
+			"type":        cfg.improvementType,
+			"effort":      cfg.effort,
+			"priority":    cfg.priority,
+			"status":      emergent.StatusProposed,
+			"proposed_at": now.Format(time.RFC3339),
+			"proposed_by": "janitor",
+			"tags":        []string{"janitor", "automated", issueType},
+		}
+
+		improvement, err := client.CreateObject(ctx, emergent.TypeImprovement, &key, improvementProps, nil)
+		if err != nil {
+			t.logger.Error("failed to create improvement", "issue_type", issueType, "error", err)
+			continue
+		}
+
+		// Link to janitor agent
+		if janitorAgentID != "" {
+			if _, err := client.CreateRelationship(ctx, emergent.RelProposedBy, improvement.ID, janitorAgentID, nil); err != nil {
+				t.logger.Warn("failed to link improvement to janitor agent", "improvement_id", improvement.ID, "error", err)
+			}
+		}
+
+		// Create subtask Tasks for each specific issue
+		result := improvementResult{
+			ImprovementID: improvement.ID,
+			IssueType:     issueType,
+			Title:         title,
+			IssueCount:    len(issues),
+			TaskIDs:       make([]string, 0, len(issues)),
+		}
+
+		for i, issue := range issues {
+			taskNumber := fmt.Sprintf("J%d", i+1)
+			taskKey := fmt.Sprintf("%s-task-%d", key, i+1)
+			taskProps := map[string]any{
+				"number":      taskNumber,
+				"description": issue.Description,
+				"task_type":   "maintenance",
+				"status":      emergent.StatusPending,
+				"tags":        []string{"janitor", "automated", issueType},
+			}
+
+			// Add suggestion as verification notes if present
+			if issue.Suggestion != "" {
+				taskProps["verification_notes"] = issue.Suggestion
+			}
+
+			task, err := client.CreateObject(ctx, emergent.TypeTask, &taskKey, taskProps, nil)
+			if err != nil {
+				t.logger.Error("failed to create task for improvement",
+					"improvement_id", improvement.ID,
+					"issue_index", i,
+					"error", err)
+				continue
+			}
+
+			// Link task to improvement
+			if _, err := client.CreateRelationship(ctx, emergent.RelHasTask, improvement.ID, task.ID, nil); err != nil {
+				t.logger.Warn("failed to link task to improvement",
+					"task_id", task.ID,
+					"improvement_id", improvement.ID,
+					"error", err)
+			}
+
+			// Link task to the affected entity if we have an ID
+			if issue.EntityID != "" {
+				if _, err := client.CreateRelationship(ctx, emergent.RelAffectsEntity, task.ID, issue.EntityID, nil); err != nil {
+					// affects_entity might not work for Task → Entity, log and continue
+					t.logger.Debug("could not link task to affected entity",
+						"task_id", task.ID,
+						"entity_id", issue.EntityID,
+						"error", err)
+				}
+			}
+
+			result.TaskIDs = append(result.TaskIDs, task.ID)
+		}
+
+		results = append(results, result)
+		t.logger.Info("created improvement with tasks",
+			"improvement_id", improvement.ID,
+			"issue_type", issueType,
+			"task_count", len(result.TaskIDs))
+	}
+
+	return results, nil
+}
+
+// buildImprovementDescription builds a markdown description for an improvement.
+func (t *JanitorRun) buildImprovementDescription(issueType string, issues []Issue) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("## %s Issues\n\n", issueType))
+	sb.WriteString(fmt.Sprintf("The janitor detected %d issues of type `%s`.\n\n", len(issues), issueType))
+	sb.WriteString("### Issues\n\n")
+
+	for i, issue := range issues {
+		sb.WriteString(fmt.Sprintf("%d. **%s** `%s` (severity: %s)\n",
+			i+1, issue.EntityType, safeKey(nil), issue.Severity))
+		sb.WriteString(fmt.Sprintf("   - %s\n", issue.Description))
+		if issue.Suggestion != "" {
+			sb.WriteString(fmt.Sprintf("   - Suggestion: %s\n", issue.Suggestion))
+		}
+	}
+
+	return sb.String()
+}
+
+// countImprovementTasks counts the total number of tasks across all improvements.
+func countImprovementTasks(improvements []improvementResult) int {
+	total := 0
+	for _, imp := range improvements {
+		total += len(imp.TaskIDs)
+	}
+	return total
+}
+
 // generateSummary creates a human-readable summary of the report.
 func (t *JanitorRun) generateSummary(report *Report) string {
 	if report.IssuesFound == 0 {
@@ -577,12 +811,13 @@ func safeKey(key *string) string {
 	return *key
 }
 
-// ensureJanitorAgent gets or creates the janitor CodingAgent entity.
-func (t *JanitorRun) ensureJanitorAgent(ctx context.Context, client *emergent.Client) (*emergent.CodingAgent, error) {
-	agent := &emergent.CodingAgent{
+// ensureJanitorAgent gets or creates the janitor Agent entity.
+func (t *JanitorRun) ensureJanitorAgent(ctx context.Context, client *emergent.Client) (*emergent.Agent, error) {
+	agent := &emergent.Agent{
 		Name:           "janitor",
 		DisplayName:    "Janitor Agent",
 		Type:           "ai",
+		AgentType:      "maintenance",
 		Active:         true,
 		Specialization: "maintenance",
 		Skills:         []string{"validation", "compliance", "cleanup"},
@@ -597,5 +832,5 @@ The janitor creates maintenance proposals when critical issues are found.`,
 		Tags: []string{"system", "automation", "maintenance"},
 	}
 
-	return client.GetOrCreateCodingAgent(ctx, agent)
+	return client.GetOrCreateAgent(ctx, agent)
 }

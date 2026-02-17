@@ -23,7 +23,7 @@ var defaultSearchTypes = []string{
 	emergent.TypeSpec,
 	emergent.TypeTask,
 	emergent.TypeActor,
-	emergent.TypeCodingAgent,
+	emergent.TypeAgent,
 	emergent.TypeRequirement,
 	emergent.TypeScenario,
 	emergent.TypeDesign,
@@ -65,7 +65,7 @@ func (t *Search) InputSchema() json.RawMessage {
     "types": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Filter to specific entity types (e.g. ['Pattern', 'Context', 'UIComponent']). Valid types: Pattern, Context, UIComponent, Action, Change, Spec, Task, Actor, CodingAgent, Requirement, Scenario, Design, TestCase, APIContract, DataModel, App"
+      "description": "Filter to specific entity types (e.g. ['Pattern', 'Context', 'UIComponent']). Valid types: Pattern, Context, UIComponent, Action, Change, Spec, Task, Actor, Agent, Requirement, Scenario, Design, TestCase, APIContract, DataModel, App"
     },
     "labels": {
       "type": "array",
