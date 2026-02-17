@@ -47,17 +47,23 @@ type Client struct {
 //
 // This enables a multi-tenant architecture where different MCP clients can
 // connect with different Emergent project tokens through the same SpecMCP server.
+//
+// In HTTP mode, an optional adminToken can be provided as a fallback for
+// server-side operations (like janitor) that don't have a user token in context.
 type ClientFactory struct {
 	serverURL  string
+	adminToken string // Optional: fallback token for server-side operations in HTTP mode
 	httpClient *http.Client
 	logger     *slog.Logger
 }
 
 // NewClientFactory creates a factory for per-request Emergent clients.
 // The shared http.Client reuses TCP connections across requests.
-func NewClientFactory(serverURL string, logger *slog.Logger) *ClientFactory {
+// adminToken is optional and used as a fallback when no token is in the request context.
+func NewClientFactory(serverURL string, adminToken string, logger *slog.Logger) *ClientFactory {
 	return &ClientFactory{
-		serverURL: serverURL,
+		serverURL:  serverURL,
+		adminToken: adminToken,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -66,12 +72,19 @@ func NewClientFactory(serverURL string, logger *slog.Logger) *ClientFactory {
 }
 
 // ClientFor creates an Emergent client using the auth token from the context.
+// If no token is in context and adminToken is configured, uses the admin token.
 // Each call creates a lightweight SDK client (~28 allocations, zero I/O) that
-// shares the factory's connection pool. Returns an error if no token is in context.
+// shares the factory's connection pool. Returns an error if no token is available.
 func (f *ClientFactory) ClientFor(ctx context.Context) (*Client, error) {
 	token := TokenFrom(ctx)
 	if token == "" {
-		return nil, fmt.Errorf("no emergent token in request context")
+		// Fallback to admin token for server-side operations (janitor, etc.)
+		if f.adminToken != "" {
+			token = f.adminToken
+			f.logger.Debug("using admin token for server-side operation")
+		} else {
+			return nil, fmt.Errorf("no emergent token in request context and no admin token configured")
+		}
 	}
 
 	// Check for project ID in environment for standalone API keys

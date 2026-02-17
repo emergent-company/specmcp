@@ -19,9 +19,10 @@ type Config struct {
 
 // EmergentConfig holds Emergent connection details.
 type EmergentConfig struct {
-	URL       string `toml:"url"`
-	Token     string `toml:"token"`      // Project-scoped token (emt_*) or standalone API key.
-	ProjectID string `toml:"project_id"` // Optional: explicit project ID (X-Project-ID header).
+	URL        string `toml:"url"`
+	Token      string `toml:"token"`       // Project-scoped token (emt_*) or standalone API key.
+	AdminToken string `toml:"admin_token"` // Admin token for server-side operations (janitor, health checks) in HTTP mode.
+	ProjectID  string `toml:"project_id"`  // Optional: explicit project ID (X-Project-ID header).
 }
 
 // ServerConfig holds MCP server metadata.
@@ -157,6 +158,7 @@ func (c *Config) applyEnv() {
 	envOverride("EMERGENT_URL", &c.Emergent.URL)
 	envOverride("EMERGENT_TOKEN", &c.Emergent.Token)
 	envOverride("EMERGENT_API_KEY", &c.Emergent.Token) // legacy alias
+	envOverride("EMERGENT_ADMIN_TOKEN", &c.Emergent.AdminToken)
 	envOverride("EMERGENT_PROJECT_ID", &c.Emergent.ProjectID)
 
 	// Transport
@@ -193,7 +195,10 @@ func (c *Config) Validate() error {
 		}
 	case "http":
 		// HTTP mode gets the token from each request's Authorization header.
-		// No server-side token is needed.
+		// AdminToken is optional but required for server-side operations like janitor.
+		if c.Emergent.AdminToken == "" && c.Janitor.Enabled {
+			return fmt.Errorf("emergent admin_token is required when janitor is enabled in HTTP mode: set emergent.admin_token in config file, or EMERGENT_ADMIN_TOKEN env var")
+		}
 	default:
 		return fmt.Errorf("invalid transport mode: %q (must be \"stdio\" or \"http\")", c.Transport.Mode)
 	}

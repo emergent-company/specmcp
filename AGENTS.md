@@ -128,6 +128,7 @@ Environment variables always override config file values.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `EMERGENT_TOKEN` | stdio only | - | Project-scoped token (`emt_*`) or API key. Required for stdio mode; not needed for HTTP mode (clients send their own token). |
+| `EMERGENT_ADMIN_TOKEN` | http mode (for janitor) | - | Admin token for server-side operations in HTTP mode (janitor, health checks). Required when `SPECMCP_JANITOR_ENABLED=true` in HTTP mode. |
 | `EMERGENT_URL` | No | `http://localhost:3002` | Emergent server URL |
 | `EMERGENT_PROJECT_ID` | No | - | Required when using standalone API keys |
 | `SPECMCP_TRANSPORT` | No | `stdio` | Transport mode: `stdio` or `http` |
@@ -162,6 +163,19 @@ Use the `spec_janitor_run` tool via any MCP client:
   "auto_fix": false            // Automatically fix minor issues (future)
 }
 ```
+
+**HTTP Mode Note**: When running in HTTP mode, the janitor requires server-side authentication. You must configure an admin token:
+
+```bash
+# Environment variable
+EMERGENT_ADMIN_TOKEN=emt_...
+
+# Or in specmcp.toml
+[emergent]
+admin_token = "emt_..."
+```
+
+Without an admin token, the janitor will fail with authentication errors when called via MCP in HTTP mode.
 
 ### Scheduled Runs
 

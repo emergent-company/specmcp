@@ -118,8 +118,14 @@ func run() error {
 	// Create Emergent client factory for per-request clients.
 	// In stdio mode, each request reuses the configured token.
 	// In HTTP mode, each request's token comes from the Authorization header
-	// (injected into context by the HTTP transport layer).
-	emFactory := emergent.NewClientFactory(cfg.Emergent.URL, logger)
+	// (injected into context by the HTTP transport layer), with optional
+	// admin token fallback for server-side operations (janitor, health checks).
+	adminToken := cfg.Emergent.AdminToken
+	if cfg.Transport.Mode == "stdio" && cfg.Emergent.Token != "" {
+		// In stdio mode, use the configured token as both user and admin token
+		adminToken = cfg.Emergent.Token
+	}
+	emFactory := emergent.NewClientFactory(cfg.Emergent.URL, adminToken, logger)
 
 	// Register workflow tools
 	specArtifact := workflow.NewSpecArtifact(emFactory)
