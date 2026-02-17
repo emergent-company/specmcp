@@ -198,7 +198,7 @@ create_proposal = false
 
 Scheduled runs check everything but don't auto-create proposals by default (only log findings). This prevents noise while still providing visibility into project health.
 
-**Note**: Scheduled janitor runs are only supported in stdio mode. HTTP mode is stateless and doesn't support background tasks.
+**Note**: Scheduled janitor runs work best in HTTP mode. HTTP mode runs as a persistent daemon process, making it ideal for background tasks. stdio mode is tied to client sessions and terminates when clients disconnect, making it unsuitable for long-running schedules. The `interval_hours` config supports fractional values (e.g., `0.5` for 30 minutes).
 
 ### Logging and Monitoring
 
