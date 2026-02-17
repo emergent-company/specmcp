@@ -553,8 +553,9 @@ var issueTypeConfig = map[string]struct {
 	"invalid_state":        {"Fix invalid readiness states", "infrastructure", "bug_fix", "critical", "small"},
 }
 
-// createImprovements creates Improvement entities grouped by issue type.
-// Each Improvement gets subtask Tasks for each specific issue in that group.
+// createImprovements creates or updates Improvement entities grouped by issue type.
+// Uses stable keys (janitor-{issueType}) so repeated runs upsert the same Improvement
+// rather than creating duplicates. Old tasks are deleted and replaced with current findings.
 // Only issues matching the threshold severity levels are included.
 func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Client, report *Report, janitorAgentID string, thresholds []string) ([]improvementResult, error) {
 	// Build threshold set for fast lookup
@@ -598,10 +599,9 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			}
 		}
 
-		// Create Improvement entity
+		// Stable key per issue type — no timestamp, so repeated runs upsert the same entity
+		key := fmt.Sprintf("janitor-%s", issueType)
 		title := fmt.Sprintf("%s (%d issues)", cfg.title, len(issues))
-		key := fmt.Sprintf("janitor-%s-%s", issueType, now.Format("20060102-150405"))
-
 		description := t.buildImprovementDescription(issueType, issues)
 
 		improvementProps := map[string]any{
@@ -617,16 +617,46 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			"tags":        []string{"janitor", "automated", issueType},
 		}
 
-		improvement, err := client.CreateObject(ctx, emergent.TypeImprovement, &key, improvementProps, nil)
+		// Check if an active Improvement already exists for this issue type
+		existing, err := client.FindByTypeAndKey(ctx, emergent.TypeImprovement, key)
 		if err != nil {
-			t.logger.Error("failed to create improvement", "issue_type", issueType, "error", err)
-			continue
+			t.logger.Warn("failed to check for existing improvement", "key", key, "error", err)
+			// Fall through to create
 		}
 
-		// Link to janitor agent
-		if janitorAgentID != "" {
-			if _, err := client.CreateRelationship(ctx, emergent.RelProposedBy, improvement.ID, janitorAgentID, nil); err != nil {
-				t.logger.Warn("failed to link improvement to janitor agent", "improvement_id", improvement.ID, "error", err)
+		var improvement *graph.GraphObject
+		isUpdate := false
+
+		if existing != nil {
+			// Check if the existing improvement is still active (not completed)
+			status, _ := existing.Properties["status"].(string)
+			if status != emergent.StatusCompleted {
+				// Update the existing improvement with fresh findings
+				improvement, err = client.UpdateObject(ctx, existing.ID, improvementProps, nil)
+				if err != nil {
+					t.logger.Error("failed to update existing improvement", "id", existing.ID, "error", err)
+					continue
+				}
+				isUpdate = true
+
+				// Delete old tasks linked to this improvement
+				t.deleteLinkedTasks(ctx, client, existing.ID)
+			}
+		}
+
+		if improvement == nil {
+			// Create new Improvement (either no existing, or existing was completed)
+			improvement, err = client.CreateObject(ctx, emergent.TypeImprovement, &key, improvementProps, nil)
+			if err != nil {
+				t.logger.Error("failed to create improvement", "issue_type", issueType, "error", err)
+				continue
+			}
+
+			// Link to janitor agent (only on first creation)
+			if janitorAgentID != "" {
+				if _, err := client.CreateRelationship(ctx, emergent.RelProposedBy, improvement.ID, janitorAgentID, nil); err != nil {
+					t.logger.Warn("failed to link improvement to janitor agent", "improvement_id", improvement.ID, "error", err)
+				}
 			}
 		}
 
@@ -675,7 +705,6 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			// Link task to the affected entity if we have an ID
 			if issue.EntityID != "" {
 				if _, err := client.CreateRelationship(ctx, emergent.RelAffectsEntity, task.ID, issue.EntityID, nil); err != nil {
-					// affects_entity might not work for Task → Entity, log and continue
 					t.logger.Debug("could not link task to affected entity",
 						"task_id", task.ID,
 						"entity_id", issue.EntityID,
@@ -686,14 +715,46 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			result.TaskIDs = append(result.TaskIDs, task.ID)
 		}
 
+		action := "created"
+		if isUpdate {
+			action = "updated"
+		}
 		results = append(results, result)
-		t.logger.Info("created improvement with tasks",
+		t.logger.Info(action+" improvement with tasks",
 			"improvement_id", improvement.ID,
 			"issue_type", issueType,
 			"task_count", len(result.TaskIDs))
 	}
 
 	return results, nil
+}
+
+// deleteLinkedTasks finds and deletes all Tasks linked to an Improvement via has_task.
+func (t *JanitorRun) deleteLinkedTasks(ctx context.Context, client *emergent.Client, improvementID string) {
+	edges, err := client.GetObjectEdges(ctx, improvementID, &graph.GetObjectEdgesOptions{
+		Type:      emergent.RelHasTask,
+		Direction: "outgoing",
+	})
+	if err != nil {
+		t.logger.Warn("failed to get tasks for improvement", "improvement_id", improvementID, "error", err)
+		return
+	}
+
+	deleted := 0
+	for _, rel := range edges.Outgoing {
+		// Delete the task object
+		if err := client.DeleteObject(ctx, rel.DstID); err != nil {
+			t.logger.Warn("failed to delete old task", "task_id", rel.DstID, "error", err)
+			continue
+		}
+		deleted++
+	}
+
+	if deleted > 0 {
+		t.logger.Info("deleted old tasks from improvement",
+			"improvement_id", improvementID,
+			"deleted_count", deleted)
+	}
 }
 
 // buildImprovementDescription builds a markdown description for an improvement.
