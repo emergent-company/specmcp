@@ -28,7 +28,6 @@ const (
 	// Supporting entities
 	TypeActor            = "Actor"
 	TypeAgent            = "Agent"
-	TypeCodingAgent      = "CodingAgent" // Deprecated: use TypeAgent. Kept for migration scripts.
 	TypePattern          = "Pattern"
 	TypeConstitution     = "Constitution"
 	TypeGraphSync        = "GraphSync"
@@ -251,9 +250,6 @@ type Agent struct {
 	VelocityPointsPerHr float64  `json:"velocity_points_per_hour,omitempty"`
 	Tags                []string `json:"tags,omitempty"`
 }
-
-// CodingAgent is a deprecated alias for Agent. Use Agent instead.
-type CodingAgent = Agent
 
 // Pattern represents a reusable implementation pattern.
 type Pattern struct {

@@ -52,7 +52,7 @@ func (t *SpecBatchArtifact) InputSchema() json.RawMessage {
           "artifact_type": {
             "type": "string",
             "description": "Type of artifact",
-            "enum": ["proposal", "spec", "design", "task", "actor", "coding_agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "requirement", "scenario", "scenario_step", "constitution"]
+            "enum": ["proposal", "spec", "design", "task", "actor", "agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "requirement", "scenario", "scenario_step", "constitution"]
           },
           "content": {
             "type": "object",

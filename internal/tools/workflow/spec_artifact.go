@@ -49,7 +49,7 @@ func (t *SpecArtifact) InputSchema() json.RawMessage {
     "artifact_type": {
       "type": "string",
       "description": "Type of artifact to add",
-      "enum": ["proposal", "spec", "design", "task", "actor", "coding_agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "data_model", "app", "requirement", "scenario", "scenario_step", "constitution"]
+      "enum": ["proposal", "spec", "design", "task", "actor", "agent", "pattern", "test_case", "api_contract", "context", "ui_component", "action", "data_model", "app", "requirement", "scenario", "scenario_step", "constitution"]
     },
     "content": {
       "type": "object",
@@ -122,7 +122,7 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return t.addScenarioStep(ctx, client, p.Content)
 	case "actor":
 		return t.addGenericEntity(ctx, client, emergent.TypeActor, p.Content, nil, p.ChangeID)
-	case "coding_agent", "agent":
+	case "agent":
 		return t.addGenericEntity(ctx, client, emergent.TypeAgent, p.Content, nil, p.ChangeID)
 	case "pattern":
 		return t.addGenericEntity(ctx, client, emergent.TypePattern, p.Content, nil, p.ChangeID)

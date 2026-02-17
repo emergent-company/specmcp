@@ -496,24 +496,20 @@ func (c *Client) HasRelationship(ctx context.Context, relType, srcID, dstID stri
 // This ensures system agents (like janitor) exist in the graph.
 func (c *Client) GetOrCreateAgent(ctx context.Context, agent *Agent) (*Agent, error) {
 	// Try to find existing agent by listing all and matching name.
-	// Check both Agent (v2) and CodingAgent (v1) types for backwards compatibility.
-	for _, entityType := range []string{TypeAgent, TypeCodingAgent} {
-		existing, err := c.ListObjects(ctx, &graph.ListObjectsOptions{
-			Type: entityType,
-		})
-		if err != nil {
-			// Type might not exist if only one pack is installed, skip
-			continue
-		}
-		for _, obj := range existing {
-			if obj.Key != nil && *obj.Key == agent.Name {
-				result, err := fromProps[Agent](obj)
-				if err != nil {
-					return nil, err
-				}
-				result.ID = obj.ID
-				return result, nil
+	existing, err := c.ListObjects(ctx, &graph.ListObjectsOptions{
+		Type: TypeAgent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, obj := range existing {
+		if obj.Key != nil && *obj.Key == agent.Name {
+			result, err := fromProps[Agent](obj)
+			if err != nil {
+				return nil, err
 			}
+			result.ID = obj.ID
+			return result, nil
 		}
 	}
 
@@ -535,10 +531,4 @@ func (c *Client) GetOrCreateAgent(ctx context.Context, agent *Agent) (*Agent, er
 	}
 	result.ID = obj.ID
 	return result, nil
-}
-
-// GetOrCreateCodingAgent is a deprecated alias for GetOrCreateAgent.
-// Deprecated: Use GetOrCreateAgent instead.
-func (c *Client) GetOrCreateCodingAgent(ctx context.Context, agent *Agent) (*Agent, error) {
-	return c.GetOrCreateAgent(ctx, agent)
 }

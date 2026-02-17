@@ -646,7 +646,7 @@ Create a new change container.
 ### spec_artifact
 Add an artifact to an existing change. Supports 16 artifact types.
 - **Required**: change_name (string), artifact_type (string)
-- **artifact_type values**: proposal, spec, requirement, scenario, scenario_step, design, task, actor, coding_agent, pattern, constitution, test_case, api_contract, context, ui_component, action
+- **artifact_type values**: proposal, spec, requirement, scenario, scenario_step, design, task, actor, agent, pattern, constitution, test_case, api_contract, context, ui_component, action
 - **Additional params**: vary by artifact_type (see tool's input schema)
 - **Guards**: proposal_before_spec, spec_before_design, design_before_tasks
 
