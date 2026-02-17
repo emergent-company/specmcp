@@ -59,7 +59,7 @@ type LogConfig struct {
 // JanitorConfig holds janitor scheduling configuration.
 type JanitorConfig struct {
 	Enabled               bool     `toml:"enabled"`                // Enable scheduled janitor runs
-	IntervalHours         int      `toml:"interval_hours"`         // How often to run (in hours)
+	IntervalHours         float64  `toml:"interval_hours"`         // How often to run (in hours, supports fractional values like 0.5)
 	CreateProposal        bool     `toml:"create_proposal"`        // Auto-create proposals for critical issues
 	CreateImprovements    bool     `toml:"create_improvements"`    // Auto-create Improvement entities from findings
 	ImprovementThresholds []string `toml:"improvement_thresholds"` // Severity levels that trigger improvements: ["critical", "warning"]
@@ -102,7 +102,7 @@ func Load(configPath string) (*Config, error) {
 		},
 		Janitor: JanitorConfig{
 			Enabled:               false,                           // Disabled by default
-			IntervalHours:         1,                               // Run every hour when enabled
+			IntervalHours:         1.0,                             // Run every hour when enabled
 			CreateProposal:        false,                           // Don't auto-create proposals by default
 			CreateImprovements:    false,                           // Don't auto-create improvements by default
 			ImprovementThresholds: []string{"critical", "warning"}, // When enabled, create improvements for critical and warning issues
@@ -226,8 +226,8 @@ func (c *Config) applyEnv() {
 		c.Janitor.Enabled = (v == "true" || v == "1")
 	}
 	if v := os.Getenv("SPECMCP_JANITOR_INTERVAL_HOURS"); v != "" {
-		var hours int
-		if _, err := fmt.Sscanf(v, "%d", &hours); err == nil && hours > 0 {
+		var hours float64
+		if _, err := fmt.Sscanf(v, "%f", &hours); err == nil && hours > 0 {
 			c.Janitor.IntervalHours = hours
 		}
 	}

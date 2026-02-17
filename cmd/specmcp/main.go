@@ -204,16 +204,21 @@ func run() error {
 		Version: version,
 	}, logger)
 
-	// Start scheduler if enabled (for stdio mode only - HTTP mode doesn't support background jobs)
+	// Start scheduler if enabled (HTTP mode is ideal for background jobs as a long-running daemon)
 	var sched *scheduler.Scheduler
-	if cfg.Janitor.Enabled && cfg.Transport.Mode == "stdio" {
+	if cfg.Janitor.Enabled {
 		sched = scheduler.NewScheduler(logger)
-		janitorJob := janitor.NewJanitorJob(emFactory, logger, cfg.Emergent.Token, cfg.Janitor)
-		interval := time.Duration(cfg.Janitor.IntervalHours) * time.Hour
+		// Use admin token for scheduled background jobs
+		janitorToken := adminToken
+		if cfg.Transport.Mode == "stdio" {
+			janitorToken = cfg.Emergent.Token
+		}
+		janitorJob := janitor.NewJanitorJob(emFactory, logger, janitorToken, cfg.Janitor)
+		interval := time.Duration(cfg.Janitor.IntervalHours * float64(time.Hour))
 		sched.AddJob(janitorJob, interval)
 		sched.Start(ctx)
 		defer sched.Stop()
-		logger.Info("janitor scheduler enabled", "interval_hours", cfg.Janitor.IntervalHours)
+		logger.Info("janitor scheduler enabled", "interval_hours", cfg.Janitor.IntervalHours, "mode", cfg.Transport.Mode)
 	}
 
 	// Select transport
