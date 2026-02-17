@@ -1,11 +1,11 @@
 # Template Pack Migration Strategy
 
 **Created**: 2026-02-17  
-**For Version**: v2.0.0 (CodingAgent → Agent refactoring)
+**For Version**: v2.0.0 (Agent → Agent refactoring)
 
 ## Overview
 
-This document describes the strategy for migrating from SpecMCP template pack v1.0.0 to v2.0.0, which renames `CodingAgent` to `Agent` and adds new properties.
+This document describes the strategy for migrating from SpecMCP template pack v1.0.0 to v2.0.0, which renames `Agent` to `Agent` and adds new properties.
 
 ---
 
@@ -49,13 +49,13 @@ client.TemplatePacks.DeleteAssignment(ctx, assignmentID)
 
 ### Phase 1: Create v2.0.0 Alongside v1.0.0
 
-**Goal**: Both `CodingAgent` (v1) and `Agent` (v2) coexist temporarily
+**Goal**: Both `Agent` (v1) and `Agent` (v2) coexist temporarily
 
 **Steps**:
 
 1. Create `templates/specmcp-pack-v2.json` with:
    - Version: `2.0.0`
-   - Remove `CodingAgent` object type
+   - Remove `Agent` object type
    - Add `Agent` object type with new properties
    - Update relationship descriptions (but keep same relationship names)
 
@@ -65,14 +65,14 @@ client.TemplatePacks.DeleteAssignment(ctx, assignmentID)
    ```
 
 3. Both packs now assigned to project:
-   - `SpecMCP v1.0.0` - Has `CodingAgent`
+   - `SpecMCP v1.0.0` - Has `Agent`
    - `SpecMCP v2.0.0` - Has `Agent`
 
 4. Emergent compiled types will include **both** types
 
 ### Phase 2: Data Migration
 
-**Goal**: Copy all `CodingAgent` entities to `Agent` entities
+**Goal**: Copy all `Agent` entities to `Agent` entities
 
 **Migration Script**: `scripts/migrate-agents.go`
 
@@ -113,17 +113,17 @@ func main() {
 }
 
 func migrateAgents(ctx context.Context, client *emergent.Client) error {
-    // 1. List all CodingAgent entities
-    log.Println("fetching all CodingAgent entities...")
+    // 1. List all Agent entities
+    log.Println("fetching all Agent entities...")
     codingAgents, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
-        Type: "CodingAgent",  // Old type
+        Type: "Agent",  // Old type
     })
     if err != nil {
-        return fmt.Errorf("listing CodingAgent entities: %w", err)
+        return fmt.Errorf("listing Agent entities: %w", err)
     }
-    log.Printf("found %d CodingAgent entities", len(codingAgents))
+    log.Printf("found %d Agent entities", len(codingAgents))
     
-    // 2. For each CodingAgent, create corresponding Agent
+    // 2. For each Agent, create corresponding Agent
     for i, oldAgent := range codingAgents {
         log.Printf("[%d/%d] migrating %s...", i+1, len(codingAgents), 
             oldAgent.Key)
@@ -153,7 +153,7 @@ func migrateAgents(ctx context.Context, client *emergent.Client) error {
         }
         log.Printf("  created Agent: %s (id=%s)", agentObj.ID, agentObj.ID)
         
-        // 3. Migrate all relationships FROM this CodingAgent
+        // 3. Migrate all relationships FROM this Agent
         outgoing, err := client.GetObjectEdges(ctx, oldAgent.ID, &graph.GetObjectEdgesOptions{
             Direction: "outgoing",
         })
@@ -161,9 +161,9 @@ func migrateAgents(ctx context.Context, client *emergent.Client) error {
             log.Printf("  WARNING: failed to get outgoing edges: %v", err)
         } else {
             for _, edge := range outgoing.Outgoing {
-                // Skip if target is also a CodingAgent (will be migrated separately)
+                // Skip if target is also a Agent (will be migrated separately)
                 targetObj, _ := client.GetObject(ctx, edge.ToID)
-                if targetObj != nil && targetObj.Type == "CodingAgent" {
+                if targetObj != nil && targetObj.Type == "Agent" {
                     continue
                 }
                 
@@ -175,7 +175,7 @@ func migrateAgents(ctx context.Context, client *emergent.Client) error {
             }
         }
         
-        // 4. Migrate all relationships TO this CodingAgent
+        // 4. Migrate all relationships TO this Agent
         incoming, err := client.GetObjectEdges(ctx, oldAgent.ID, &graph.GetObjectEdgesOptions{
             Direction: "incoming",
         })
@@ -183,9 +183,9 @@ func migrateAgents(ctx context.Context, client *emergent.Client) error {
             log.Printf("  WARNING: failed to get incoming edges: %v", err)
         } else {
             for _, edge := range incoming.Incoming {
-                // Skip if source is also a CodingAgent (will be migrated separately)
+                // Skip if source is also a Agent (will be migrated separately)
                 sourceObj, _ := client.GetObject(ctx, edge.FromID)
-                if sourceObj != nil && sourceObj.Type == "CodingAgent" {
+                if sourceObj != nil && sourceObj.Type == "Agent" {
                     continue
                 }
                 
@@ -264,8 +264,8 @@ EMERGENT_TOKEN=emt_... go run ./scripts/migrate-agents.go
 
 **Output**:
 ```
-fetching all CodingAgent entities...
-found 1 CodingAgent entities
+fetching all Agent entities...
+found 1 Agent entities
 [1/1] migrating janitor...
   created Agent: b2bcc109-7de7-48b2-af9b-906ad475e61f (id=...)
   migrated 2 outgoing + 5 incoming relationships
@@ -274,13 +274,13 @@ migration complete
 
 ### Phase 3: Update Code to Use Agent
 
-**Goal**: Change all SpecMCP code to use `Agent` instead of `CodingAgent`
+**Goal**: Change all SpecMCP code to use `Agent` instead of `Agent`
 
 **Files to Update**:
 - `internal/emergent/types.go` - Update constant, struct, relationships
 - `internal/emergent/entities.go` - Rename functions
 - `internal/tools/janitor/janitor.go` - Use Agent
-- All other tools that reference CodingAgent
+- All other tools that reference Agent
 
 **Code Changes**: Already detailed in `AGENT_REFACTORING_PLAN.md`
 
@@ -292,9 +292,9 @@ migration complete
 
 ```go
 func verifyMigration(ctx context.Context, client *emergent.Client) error {
-    // 1. Count CodingAgent entities
+    // 1. Count Agent entities
     codingAgents, _ := client.ListObjects(ctx, &graph.ListObjectsOptions{
-        Type: "CodingAgent",
+        Type: "Agent",
     })
     
     // 2. Count Agent entities
@@ -302,7 +302,7 @@ func verifyMigration(ctx context.Context, client *emergent.Client) error {
         Type: "Agent",
     })
     
-    log.Printf("CodingAgent entities: %d", len(codingAgents))
+    log.Printf("Agent entities: %d", len(codingAgents))
     log.Printf("Agent entities: %d", len(agents))
     
     // 3. Check each Agent has proper agent_type
@@ -342,21 +342,21 @@ func verifyMigration(ctx context.Context, client *emergent.Client) error {
 
 ### Phase 5: Cleanup Old Data (Optional)
 
-**Goal**: Remove old `CodingAgent` entities after confirming everything works
+**Goal**: Remove old `Agent` entities after confirming everything works
 
 **⚠️ Warning**: Only do this after thorough testing!
 
 ```go
 func cleanupOldAgents(ctx context.Context, client *emergent.Client) error {
-    // List all CodingAgent entities
+    // List all Agent entities
     codingAgents, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
-        Type: "CodingAgent",
+        Type: "Agent",
     })
     if err != nil {
         return err
     }
     
-    log.Printf("deleting %d CodingAgent entities...", len(codingAgents))
+    log.Printf("deleting %d Agent entities...", len(codingAgents))
     
     for i, agent := range codingAgents {
         // Delete all relationships first
@@ -417,13 +417,13 @@ func generatePreMigrationReport(ctx context.Context, client *emergent.Client) er
     }
     report.InstalledPacks = packs
     
-    // 2. Count CodingAgent entities
+    // 2. Count Agent entities
     codingAgents, _ := client.ListObjects(ctx, &graph.ListObjectsOptions{
-        Type: "CodingAgent",
+        Type: "Agent",
     })
-    report.CodingAgentCount = len(codingAgents)
+    report.AgentCount = len(codingAgents)
     
-    // 3. Count relationships to/from CodingAgents
+    // 3. Count relationships to/from Agents
     totalIncoming := 0
     totalOutgoing := 0
     for _, agent := range codingAgents {
@@ -436,11 +436,11 @@ func generatePreMigrationReport(ctx context.Context, client *emergent.Client) er
         "outgoing": totalOutgoing,
     }
     
-    // 4. List all relationship types that reference CodingAgent
+    // 4. List all relationship types that reference Agent
     compiled, _ := client.GetCompiledTypes(ctx)
     affectedRelationships := []string{}
     for _, rt := range compiled.RelationshipTypes {
-        if rt.FromType == "CodingAgent" || rt.ToType == "CodingAgent" {
+        if rt.FromType == "Agent" || rt.ToType == "Agent" {
             affectedRelationships = append(affectedRelationships, rt.Name)
         }
     }
@@ -471,7 +471,7 @@ EMERGENT_TOKEN=emt_... go run ./scripts/pre-migration-report.go
       "assignment_id": "abc-123"
     }
   ],
-  "coding_agent_count": 1,
+  "agent_count": 1,
   "relationship_counts": {
     "incoming": 5,
     "outgoing": 2
@@ -496,15 +496,15 @@ func dryRunMigration(ctx context.Context, client *emergent.Client) error {
     // Simulate Phase 1: Register v2.0.0
     log.Println("\n[Phase 1] Would register SpecMCP v2.0.0")
     log.Println("  - Adds Agent object type")
-    log.Println("  - Keeps CodingAgent in v1.0.0")
+    log.Println("  - Keeps Agent in v1.0.0")
     log.Println("  - Both types available after assignment")
     
     // Simulate Phase 2: Data migration
     codingAgents, _ := client.ListObjects(ctx, &graph.ListObjectsOptions{
-        Type: "CodingAgent",
+        Type: "Agent",
     })
     
-    log.Printf("\n[Phase 2] Would migrate %d CodingAgent entities:", len(codingAgents))
+    log.Printf("\n[Phase 2] Would migrate %d Agent entities:", len(codingAgents))
     for _, agent := range codingAgents {
         name := agent.Properties["name"]
         spec := agent.Properties["specialization"]
@@ -573,8 +573,8 @@ echo "Rolling back Agent migration..."
 echo "Deleting Agent entities..."
 # (Use API to delete)
 
-# 2. Keep CodingAgent entities intact
-echo "CodingAgent entities preserved"
+# 2. Keep Agent entities intact
+echo "Agent entities preserved"
 
 # 3. Unassign SpecMCP v2.0.0
 echo "Unassigning SpecMCP v2.0.0..."
@@ -615,11 +615,11 @@ echo "Rollback complete"
 ### Post-Migration
 
 - [ ] Monitor logs for errors
-- [ ] Verify janitor creates Agent (not CodingAgent)
+- [ ] Verify janitor creates Agent (not Agent)
 - [ ] Verify improvements link to Agent via proposed_by
 - [ ] Run full test suite
 - [ ] Generate post-migration report
-- [ ] (Optional) Clean up old CodingAgent entities
+- [ ] (Optional) Clean up old Agent entities
 - [ ] (Optional) Unassign v1.0.0 template pack
 - [ ] Update documentation
 
@@ -633,7 +633,7 @@ echo "Rollback complete"
 
 1. **Week 1**: Register v2.0.0, run migration, verify data
 2. **Week 2**: Deploy code using Agent, monitor in production
-3. **Week 3**: If stable, clean up old CodingAgent data
+3. **Week 3**: If stable, clean up old Agent data
 4. **Week 4**: Unassign v1.0.0 pack
 
 This approach:
@@ -661,7 +661,7 @@ If you want faster migration:
 
 4. **Compiled Types Cache**: After assigning v2.0.0, how quickly do compiled types update? Is there a cache invalidation delay?
 
-5. **Safe Deletion**: Is there a way to "soft delete" CodingAgent entities or mark them as deprecated rather than hard deleting?
+5. **Safe Deletion**: Is there a way to "soft delete" Agent entities or mark them as deprecated rather than hard deleting?
 
 ---
 

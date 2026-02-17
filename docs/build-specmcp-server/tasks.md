@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Research Emergent template pack JSON format by examining existing packs in the Emergent codebase
 - [ ] 1.2 Create `templates/specmcp-pack.json` with Actor entity type (name, display_name, description, tags)
-- [ ] 1.3 Add CodingAgent entity type (name, display_name, type, active, skills, specialization, instructions, velocity_points_per_hour, tags)
+- [ ] 1.3 Add Agent entity type (name, display_name, type, active, skills, specialization, instructions, velocity_points_per_hour, tags)
 - [ ] 1.4 Add Pattern entity type (name, display_name, type, scope, description, example_code, usage_guidance, tags)
 - [ ] 1.5 Add Constitution entity type (name, version, principles, guardrails, testing_requirements, security_requirements, patterns_required, patterns_forbidden, tags)
 - [ ] 1.6 Add Change entity type (name, status, base_commit, tags)
@@ -34,7 +34,7 @@
 - [ ] 2.10 Define Constitution relationships (governed_by, requires_pattern, forbids_pattern)
 - [ ] 2.11 Define Test relationships (tested_by: Scenario → TestCase, tests: TestCase → Scenario)
 - [ ] 2.12 Define Contract relationships (has_contract, implements_contract)
-- [ ] 2.13 Define Ownership relationships (owned_by: Spec/Context/UIComponent/Action → CodingAgent)
+- [ ] 2.13 Define Ownership relationships (owned_by: Spec/Context/UIComponent/Action → Agent)
 
 ## 3. Template Pack Registration
 
@@ -98,7 +98,7 @@
 - [ ] 8.6 Implement `spec_complete_task` tool — mark completed, record timestamps, calculate actual_hours, find newly unblocked tasks
 - [ ] 8.7 Implement `spec_get_scenario_progress` tool — sum completed vs total complexity points
 - [ ] 8.8 Implement `spec_get_critical_path` tool — longest dependency chain by complexity points (topological sort + DP)
-- [ ] 8.9 Implement velocity tracking — update CodingAgent velocity_points_per_hour after task completion
+- [ ] 8.9 Implement velocity tracking — update Agent velocity_points_per_hour after task completion
 - [ ] 8.10 Write tests for task management including dependency graph scenarios
 
 ## 9. Sync Tools

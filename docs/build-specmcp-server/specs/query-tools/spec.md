@@ -16,7 +16,7 @@ The system SHALL provide a `spec_get_component` tool that retrieves a UIComponen
 
 #### Scenario: Retrieve component with composition hierarchy
 - **WHEN** `spec_get_component` is called with name "user-list"
-- **THEN** the response includes the component properties plus child components (composed_of), parent components, contexts that use it (uses_component), and owning CodingAgent (owned_by)
+- **THEN** the response includes the component properties plus child components (composed_of), parent components, contexts that use it (uses_component), and owning Agent (owned_by)
 
 ### Requirement: Get action details
 The system SHALL provide a `spec_get_action` tool that retrieves an Action entity with its contexts (available_in), navigation targets (navigates_to), and related patterns.

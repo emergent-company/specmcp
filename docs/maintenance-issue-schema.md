@@ -32,8 +32,8 @@ A **MaintenanceIssue** represents a data integrity, compliance, or structural pr
 - `affects_entity` → *: Links to each affected entity
 
 ### Workflow Integration  
-- `proposed_by` → CodingAgent: The janitor agent
-- `assigned_to` → CodingAgent: Who will fix it (optional)
+- `proposed_by` → Agent: The janitor agent
+- `assigned_to` → Agent: Who will fix it (optional)
 - `resolved_by_change` → Change: If fix requires code changes
 
 ### Tracking

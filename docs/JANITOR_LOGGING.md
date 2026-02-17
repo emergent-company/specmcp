@@ -154,7 +154,7 @@ Potential improvements:
 
 ## Related
 
-- **Janitor CodingAgent** (v0.6.2): Janitor tracks itself as an agent
+- **Janitor Agent** (v0.6.2): Janitor tracks itself as an agent
 - **Long Outage Handling** (v0.6.1): Connection resilience for janitor runs
 - **Janitor Scheduled Runs**: Config in `specmcp.toml` for automated checks
 

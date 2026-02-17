@@ -5,7 +5,7 @@
 Successfully completed three major improvements to SpecMCP:
 
 1. ✅ **Long Outage Handling** (v0.6.1) - Intelligent retry strategy for Emergent connection
-2. ✅ **Janitor as CodingAgent** (v0.6.2) - Janitor tracks itself and authors proposals
+2. ✅ **Janitor as Agent** (v0.6.2) - Janitor tracks itself and authors proposals
 3. ✅ **Janitor Logging** (v0.6.3) - Structured logging for better monitoring
 
 All features are now deployed to production on mcj-emergent.
@@ -43,17 +43,17 @@ EMERGENT_LONG_OUTAGE_THRESHOLD=20          # Switch to long outage after 20 fail
 
 ---
 
-## Feature 2: Janitor as CodingAgent (v0.6.2)
+## Feature 2: Janitor as Agent (v0.6.2)
 
 ### Problem
 The janitor agent creates maintenance proposals but wasn't tracking itself as the author, making it unclear who/what created them.
 
 ### Solution
-- Added `GetOrCreateCodingAgent()` helper function
-- Janitor creates/gets its CodingAgent entry on each run
+- Added `GetOrCreateAgent()` helper function
+- Janitor creates/gets its Agent entry on each run
 - Maintenance proposals are linked via `proposed_by` relationship
 
-### Janitor CodingAgent
+### Janitor Agent
 ```yaml
 ID: b2bcc109-7de7-48b2-af9b-906ad475e61f
 Name: janitor
@@ -174,7 +174,7 @@ journalctl -u specmcp --since "1 week ago" | grep "janitor run complete"
 | Version | Feature | Commit | Status |
 |---------|---------|--------|--------|
 | v0.6.1 | Long Outage Handling | dce8b63 | ✅ Deployed |
-| v0.6.2 | Janitor as CodingAgent | da4f7c2 | ✅ Deployed |
+| v0.6.2 | Janitor as Agent | da4f7c2 | ✅ Deployed |
 | v0.6.3 | Janitor Logging | 55dcbee | ✅ Deployed |
 
 **Current Production Version**: v0.6.3  
@@ -196,7 +196,7 @@ sudo systemctl restart emergent
 # SpecMCP successfully reconnected
 ```
 
-### Janitor CodingAgent
+### Janitor Agent
 ```bash
 # Query for janitor agent
 curl -X POST http://localhost:3002/api/v1/graph/query \
@@ -227,7 +227,7 @@ sudo journalctl -u specmcp -n 10 | grep janitor
 - `README.md`
 - `specmcp.example.toml`
 
-### Janitor CodingAgent
+### Janitor Agent
 - `internal/emergent/entities.go`
 - `internal/tools/janitor/janitor.go`
 

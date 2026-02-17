@@ -56,12 +56,12 @@ The system SHALL support creating TestCase entities linked to Scenarios via `tes
 - **THEN** the system can report which Scenarios have passing tests and which remain untested
 
 ### Requirement: Ownership tracking
-The system SHALL support `owned_by` relationships from Specs, Contexts, UIComponents, and Actions to CodingAgent entities, establishing who is responsible for maintaining each entity.
+The system SHALL support `owned_by` relationships from Specs, Contexts, UIComponents, and Actions to Agent entities, establishing who is responsible for maintaining each entity.
 
 #### Scenario: Assign ownership
-- **WHEN** an `owned_by` relationship is created from Spec "auth" to CodingAgent "alice"
+- **WHEN** an `owned_by` relationship is created from Spec "auth" to Agent "alice"
 - **THEN** alice is the designated owner of the auth spec and can be queried as such
 
 #### Scenario: Query ownership
 - **WHEN** a query asks "what does alice own?"
-- **THEN** the system returns all entities with `owned_by` relationships pointing to alice's CodingAgent entity
+- **THEN** the system returns all entities with `owned_by` relationships pointing to alice's Agent entity

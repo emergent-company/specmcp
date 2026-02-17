@@ -33,7 +33,7 @@ type AgentNote struct {
     Context     string     `json:"context"`         // What task was being done
     Importance  string     `json:"importance"`      // low, medium, high, critical
     CreatedAt   *time.Time `json:"created_at"`
-    CreatedBy   string     `json:"created_by"`      // CodingAgent name
+    CreatedBy   string     `json:"created_by"`      // Agent name
     Tags        []string   `json:"tags,omitempty"`
     
     // Rich context (optional)

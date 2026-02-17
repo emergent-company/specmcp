@@ -79,23 +79,32 @@ Actor:
     tags: string[]            # domain:auth, lifecycle:stable
 ```
 
-### Coding Agents
+### Agents
 
-Represent developers or AI agents who implement tasks.
+Represent developers or AI agents who perform tasks. Supports multiple agent types.
 
 ```yaml
-CodingAgent:
+Agent:
   properties:
-    name: string              # "alice", "ui-specialist-ai"
-    display_name: string      # "Alice (Senior Frontend)"
+    name: string              # "alice", "ui-specialist-ai", "janitor"
+    display_name: string      # "Alice (Senior Frontend)", "Janitor Agent"
+    agent_type: enum          # coding | maintenance | research | testing | deployment | analysis
     type: enum                # human | ai
     active: boolean           # Available for assignment
-    skills: string[]          # ["react", "typescript", "go"]
-    specialization: enum      # frontend | backend | fullstack | testing | devops
+    skills: string[]          # ["react", "typescript", "go"] or ["validation", "compliance"]
+    specialization: enum      # frontend | backend | fullstack | testing | devops | maintenance
     instructions: text        # Agent-specific guidelines
     velocity_points_per_hour: number  # Measured performance
     tags: string[]
 ```
+
+**Agent Types:**
+- `coding` - Implements features and fixes bugs (default)
+- `maintenance` - Performs janitor/cleanup tasks
+- `research` - Investigates and explores codebase
+- `testing` - QA and validation
+- `deployment` - CI/CD and operations
+- `analysis` - Code analysis and metrics
 
 ### Patterns
 
@@ -486,7 +495,7 @@ implements:         Task -> UIComponent
 implements:         Task -> Action
 implements:         Task -> Pattern
 
-assigned_to:        Task -> CodingAgent        # Who's working on it
+assigned_to:        Task -> Agent              # Who's working on it
 ```
 
 ### Constitution Relationships
@@ -515,10 +524,10 @@ implements_contract: Action -> APIContract     # Action implements contract endp
 ### Ownership Relationships
 
 ```yaml
-owned_by:           Spec -> CodingAgent        # Who is responsible for this spec
-owned_by:           Context -> CodingAgent     # Who is responsible for this context
-owned_by:           UIComponent -> CodingAgent # Who is responsible for this component
-owned_by:           Action -> CodingAgent      # Who is responsible for this action
+owned_by:           Spec -> Agent              # Who is responsible for this spec
+owned_by:           Context -> Agent           # Who is responsible for this context
+owned_by:           UIComponent -> Agent       # Who is responsible for this component
+owned_by:           Action -> Agent            # Who is responsible for this action
 ```
 
 ---
@@ -944,7 +953,7 @@ specmcp:
                                   │ assigned_to                                 │
                                   ▼                                             │
                            ┌─────────────┐                                      │
-                           │ CodingAgent │                                      │
+                           │    Agent    │                                      │
                            └─────────────┘                                      │
                                                                                 │
 ────────────────────────────────────────────────────────────────────────────────┘

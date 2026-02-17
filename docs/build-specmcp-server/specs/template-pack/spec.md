@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Entity type definitions
-The system SHALL define a template pack containing all 17 entity types with their properties, types, and descriptions. Entity types include: Actor, CodingAgent, Pattern, Constitution, Change, Proposal, Spec, Requirement, Scenario, ScenarioStep, Design, Task, TestCase, APIContract, Context, UIComponent, Action, and GraphSync.
+The system SHALL define a template pack containing all entity types with their properties, types, and descriptions. Entity types include: Actor, Agent, Pattern, Constitution, Change, Proposal, Spec, Requirement, Scenario, ScenarioStep, Design, Task, TestCase, APIContract, Context, UIComponent, Action, App, DataModel, GraphSync, Improvement, and MaintenanceIssue.
 
 #### Scenario: Template pack contains all entity types
 - **WHEN** the template pack JSON is loaded into Emergent
-- **THEN** all 17 entity types are available in the project's type registry with correct property schemas
+- **THEN** all entity types are available in the project's type registry with correct property schemas
 
 #### Scenario: Entity properties use correct types
 - **WHEN** an entity type definition is inspected

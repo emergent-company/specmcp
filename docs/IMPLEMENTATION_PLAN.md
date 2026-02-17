@@ -20,7 +20,7 @@ Create the Emergent template pack that defines all entity and relationship types
 |----|------|------------|--------------|--------|
 | P1-T1 | Research Emergent template pack format and API | 3 | - | pending |
 | P1-T2 | Create Actor entity type definition | 2 | P1-T1 | pending |
-| P1-T3 | Create CodingAgent entity type definition | 3 | P1-T1 | pending |
+| P1-T3 | Create Agent entity type definition | 3 | P1-T1 | pending |
 | P1-T4 | Create Pattern entity type definition | 3 | P1-T1 | pending |
 | P1-T5 | Create Constitution entity type definition | 3 | P1-T1 | pending |
 | P1-T6 | Create Change management entity types (Change, Proposal, Spec, Requirement, Design) | 5 | P1-T1 | pending |

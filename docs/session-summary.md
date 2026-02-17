@@ -31,7 +31,7 @@
 - `scoped_to_app`: Improvement → App
 - `promoted_to_change`: Improvement → Change
 - `superseded_by`: Improvement → Improvement
-- `proposed_by`: Improvement → CodingAgent
+- `proposed_by`: Improvement → Agent
 
 ### Build Status
 ✅ All code compiles successfully  
