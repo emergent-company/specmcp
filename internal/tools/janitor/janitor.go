@@ -5,6 +5,7 @@ package janitor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -638,9 +639,6 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 					continue
 				}
 				isUpdate = true
-
-				// Delete old tasks linked to this improvement
-				t.deleteLinkedTasks(ctx, client, existing.ID)
 			}
 		}
 
@@ -660,7 +658,7 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			}
 		}
 
-		// Create subtask Tasks for each specific issue
+		// Create or reconcile subtasks for each specific issue
 		result := improvementResult{
 			ImprovementID: improvement.ID,
 			IssueType:     issueType,
@@ -669,51 +667,12 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 			TaskIDs:       make([]string, 0, len(issues)),
 		}
 
-		for i, issue := range issues {
-			taskNumber := fmt.Sprintf("J%d", i+1)
-			taskKey := fmt.Sprintf("%s-task-%d", key, i+1)
-			taskProps := map[string]any{
-				"number":      taskNumber,
-				"description": issue.Description,
-				"task_type":   "maintenance",
-				"status":      emergent.StatusPending,
-				"tags":        []string{"janitor", "automated", issueType},
-			}
-
-			// Add suggestion as verification notes if present
-			if issue.Suggestion != "" {
-				taskProps["verification_notes"] = issue.Suggestion
-			}
-
-			task, err := client.CreateObject(ctx, emergent.TypeTask, &taskKey, taskProps, nil)
-			if err != nil {
-				t.logger.Error("failed to create task for improvement",
-					"improvement_id", improvement.ID,
-					"issue_index", i,
-					"error", err)
-				continue
-			}
-
-			// Link task to improvement
-			if _, err := client.CreateRelationship(ctx, emergent.RelHasTask, improvement.ID, task.ID, nil); err != nil {
-				t.logger.Warn("failed to link task to improvement",
-					"task_id", task.ID,
-					"improvement_id", improvement.ID,
-					"error", err)
-			}
-
-			// Link task to the affected entity if we have an ID
-			if issue.EntityID != "" {
-				if _, err := client.CreateRelationship(ctx, emergent.RelAffectsEntity, task.ID, issue.EntityID, nil); err != nil {
-					t.logger.Debug("could not link task to affected entity",
-						"task_id", task.ID,
-						"entity_id", issue.EntityID,
-						"error", err)
-				}
-			}
-
-			result.TaskIDs = append(result.TaskIDs, task.ID)
+		taskIDs, err := t.reconcileTasks(ctx, client, improvement.ID, issues, issueType)
+		if err != nil {
+			t.logger.Error("failed to reconcile tasks", "improvement_id", improvement.ID, "error", err)
+			continue
 		}
+		result.TaskIDs = taskIDs
 
 		action := "created"
 		if isUpdate {
@@ -729,32 +688,137 @@ func (t *JanitorRun) createImprovements(ctx context.Context, client *emergent.Cl
 	return results, nil
 }
 
-// deleteLinkedTasks finds and deletes all Tasks linked to an Improvement via has_task.
-func (t *JanitorRun) deleteLinkedTasks(ctx context.Context, client *emergent.Client, improvementID string) {
+// computeIssueHash generates a stable hash for an issue to track it across runs.
+func computeIssueHash(issue Issue) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s:%s:%s", issue.Type, issue.EntityID, issue.Description)))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// reconcileTasks syncs the current issues with the existing tasks for an improvement.
+// It creates new tasks for new issues, updates existing tasks, and completes tasks for resolved issues.
+func (t *JanitorRun) reconcileTasks(ctx context.Context, client *emergent.Client, improvementID string, issues []Issue, issueType string) ([]string, error) {
+	// 1. Get all existing tasks linked to this improvement
 	edges, err := client.GetObjectEdges(ctx, improvementID, &graph.GetObjectEdgesOptions{
 		Type:      emergent.RelHasTask,
 		Direction: "outgoing",
 	})
 	if err != nil {
-		t.logger.Warn("failed to get tasks for improvement", "improvement_id", improvementID, "error", err)
-		return
+		return nil, fmt.Errorf("getting existing tasks: %w", err)
 	}
 
-	deleted := 0
-	for _, rel := range edges.Outgoing {
-		// Delete the task object
-		if err := client.DeleteObject(ctx, rel.DstID); err != nil {
-			t.logger.Warn("failed to delete old task", "task_id", rel.DstID, "error", err)
+	existingTasks := make(map[string]*graph.GraphObject)
+
+	// Pre-fetch tasks to inspect their tags
+	for _, edge := range edges.Outgoing {
+		task, err := client.GetObject(ctx, edge.DstID)
+		if err != nil {
 			continue
 		}
-		deleted++
+
+		// Find the issue hash tag
+		var hash string
+		if task.Labels != nil {
+			for _, tag := range task.Labels {
+				if strings.HasPrefix(tag, "janitor:issue_hash:") {
+					hash = strings.TrimPrefix(tag, "janitor:issue_hash:")
+					break
+				}
+			}
+		}
+
+		if hash != "" {
+			existingTasks[hash] = task
+		}
 	}
 
-	if deleted > 0 {
-		t.logger.Info("deleted old tasks from improvement",
-			"improvement_id", improvementID,
-			"deleted_count", deleted)
+	activeHashes := make(map[string]bool)
+	var taskIDs []string
+
+	// 2. Process current issues
+	for _, issue := range issues {
+		hash := computeIssueHash(issue)
+		activeHashes[hash] = true
+
+		existingTask, exists := existingTasks[hash]
+
+		if exists {
+			// Update existing task if needed
+			// We only update if description changed to avoid noise
+			props := map[string]any{
+				"description": issue.Description,
+			}
+			if issue.Suggestion != "" {
+				props["verification_notes"] = issue.Suggestion
+			}
+
+			if _, err := client.UpdateObject(ctx, existingTask.ID, props, nil); err != nil {
+				t.logger.Warn("failed to update task", "task_id", existingTask.ID, "error", err)
+			}
+			taskIDs = append(taskIDs, existingTask.ID)
+
+		} else {
+			// Create new task
+			taskKey := fmt.Sprintf("janitor-task-%s-%s", issueType, hash[:8])
+
+			taskProps := map[string]any{
+				"number":      fmt.Sprintf("J-%s", hash[:6]),
+				"description": issue.Description,
+				"task_type":   "maintenance",
+				"status":      emergent.StatusPending,
+				"tags": []string{
+					"janitor",
+					"automated",
+					issueType,
+					fmt.Sprintf("janitor:issue_hash:%s", hash),
+					fmt.Sprintf("janitor:entity_id:%s", issue.EntityID),
+				},
+			}
+
+			if issue.Suggestion != "" {
+				taskProps["verification_notes"] = issue.Suggestion
+			}
+
+			task, err := client.CreateObject(ctx, emergent.TypeTask, &taskKey, taskProps, nil)
+			if err != nil {
+				t.logger.Error("failed to create task", "key", taskKey, "error", err)
+				continue
+			}
+
+			// Link to improvement
+			if _, err := client.CreateRelationship(ctx, emergent.RelHasTask, improvementID, task.ID, nil); err != nil {
+				t.logger.Warn("failed to link task", "task_id", task.ID, "error", err)
+			}
+
+			// Link to affected entity
+			if issue.EntityID != "" {
+				if _, err := client.CreateRelationship(ctx, emergent.RelAffectsEntity, task.ID, issue.EntityID, nil); err != nil {
+					t.logger.Debug("failed to link entity", "task_id", task.ID, "error", err)
+				}
+			}
+
+			taskIDs = append(taskIDs, task.ID)
+		}
 	}
+
+	// 3. Close tasks for issues that no longer exist
+	for hash, task := range existingTasks {
+		if !activeHashes[hash] {
+			// Issue is gone!
+			status, _ := task.Properties["status"].(string)
+			if status != emergent.StatusCompleted && status != emergent.StatusArchived {
+				_, err := client.UpdateObject(ctx, task.ID, map[string]any{
+					"status":             emergent.StatusCompleted,
+					"verification_notes": "Auto-resolved: Issue no longer detected by janitor.",
+				}, nil)
+				if err != nil {
+					t.logger.Warn("failed to auto-complete task", "task_id", task.ID, "error", err)
+				}
+			}
+		}
+	}
+
+	return taskIDs, nil
 }
 
 // buildImprovementDescription builds a markdown description for an improvement.
