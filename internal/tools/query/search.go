@@ -105,23 +105,31 @@ func (t *Search) Execute(ctx context.Context, params json.RawMessage) (*mcp.Tool
 		limit = 100
 	}
 
+	// Use default types if none specified
+	types := p.Types
+	if len(types) == 0 {
+		types = defaultSearchTypes
+	}
+
 	// Try FTS first
 	resp, err := client.FTSSearch(ctx, &graph.FTSSearchOptions{
 		Query:  p.Query,
-		Types:  p.Types,
+		Types:  types,
 		Labels: p.Labels,
 		Limit:  limit,
 	})
 
 	if err == nil && resp.Total > 0 {
-		// FTS worked — return results
+		// FTS worked — filter out inactive entities and return results
 		results := make([]map[string]any, 0, len(resp.Data))
 		for _, item := range resp.Data {
-			results = append(results, buildSearchResult(item.Object, item.Score))
+			if isActive(item.Object) {
+				results = append(results, buildSearchResult(item.Object, item.Score))
+			}
 		}
 		return mcp.JSONResult(map[string]any{
 			"results": results,
-			"total":   resp.Total,
+			"total":   len(results),
 			"count":   len(results),
 			"query":   p.Query,
 			"method":  "fts",
@@ -182,7 +190,7 @@ func (t *Search) fallbackSearch(ctx context.Context, client *emergent.Client, qu
 			if len(results) >= limit {
 				break
 			}
-			if matchesQuery(obj, queryTerms) {
+			if isActive(obj) && matchesQuery(obj, queryTerms) {
 				results = append(results, buildSearchResult(obj, 0))
 			}
 		}
@@ -206,7 +214,7 @@ func (t *Search) fallbackSearch(ctx context.Context, client *emergent.Client, qu
 					if seen[obj.ID] {
 						continue
 					}
-					if matchesQuery(obj, queryTerms) {
+					if isActive(obj) && matchesQuery(obj, queryTerms) {
 						results = append(results, buildSearchResult(obj, 0))
 					}
 				}
@@ -221,6 +229,23 @@ func (t *Search) fallbackSearch(ctx context.Context, client *emergent.Client, qu
 		"query":   queryStr,
 		"method":  "fallback",
 	})
+}
+
+// isActive checks if an entity is active (default true if property not set).
+// Filters out entities explicitly marked with active: false.
+func isActive(obj *graph.GraphObject) bool {
+	if obj == nil || obj.Properties == nil {
+		return true // default to active
+	}
+	active, ok := obj.Properties["active"]
+	if !ok {
+		return true // no active property = active by default
+	}
+	activeBool, ok := active.(bool)
+	if !ok {
+		return true // invalid type = treat as active
+	}
+	return activeBool
 }
 
 // matchesQuery checks if any query term appears in the object's key or string properties.
