@@ -489,3 +489,48 @@ func (c *Client) HasRelationship(ctx context.Context, relType, srcID, dstID stri
 	}
 	return len(rels) > 0, nil
 }
+
+// --- CodingAgent ---
+
+// GetOrCreateCodingAgent gets or creates a CodingAgent by name.
+// This ensures system agents (like janitor) exist in the graph.
+func (c *Client) GetOrCreateCodingAgent(ctx context.Context, agent *CodingAgent) (*CodingAgent, error) {
+	// Try to find existing agent by listing all and matching name
+	existing, err := c.ListObjects(ctx, &graph.ListObjectsOptions{
+		Type: TypeCodingAgent,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing CodingAgents: %w", err)
+	}
+
+	// Check if agent with this name exists
+	for _, obj := range existing {
+		if obj.Key != nil && *obj.Key == agent.Name {
+			result, err := fromProps[CodingAgent](obj)
+			if err != nil {
+				return nil, err
+			}
+			result.ID = obj.ID
+			return result, nil
+		}
+	}
+
+	// Agent doesn't exist, create it
+	key := agent.Name
+	props, err := toProps(agent)
+	if err != nil {
+		return nil, fmt.Errorf("converting agent to props: %w", err)
+	}
+
+	obj, err := c.CreateObject(ctx, TypeCodingAgent, &key, props, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating CodingAgent: %w", err)
+	}
+
+	result, err := fromProps[CodingAgent](obj)
+	if err != nil {
+		return nil, err
+	}
+	result.ID = obj.ID
+	return result, nil
+}

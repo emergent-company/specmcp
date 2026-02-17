@@ -110,6 +110,13 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 
 	t.logger.Info("starting janitor run", "scope", p.Scope, "create_proposal", p.CreateProposal)
 
+	// Ensure the janitor CodingAgent exists in the graph
+	janitorAgent, err := t.ensureJanitorAgent(ctx, client)
+	if err != nil {
+		t.logger.Warn("failed to ensure janitor agent exists", "error", err)
+		// Continue anyway - the proposal will be created without an author
+	}
+
 	report := &Report{
 		Timestamp:    time.Now().Format(time.RFC3339),
 		EntityCounts: make(map[string]int),
@@ -152,12 +159,16 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	// Create maintenance proposal if requested and critical issues exist
 	var proposalID string
 	if p.CreateProposal && report.CriticalIssues > 0 {
-		proposal, err := t.createMaintenanceProposal(ctx, client, report)
+		var janitorAgentID string
+		if janitorAgent != nil {
+			janitorAgentID = janitorAgent.ID
+		}
+		proposal, err := t.createMaintenanceProposal(ctx, client, report, janitorAgentID)
 		if err != nil {
 			t.logger.Error("error creating maintenance proposal", "error", err)
 		} else {
 			proposalID = proposal.ID
-			t.logger.Info("created maintenance proposal", "proposal_id", proposalID)
+			t.logger.Info("created maintenance proposal", "proposal_id", proposalID, "author", "janitor")
 		}
 	}
 
@@ -425,7 +436,7 @@ func (t *JanitorRun) checkOrphaned(ctx context.Context, client *emergent.Client,
 }
 
 // createMaintenanceProposal creates a proposal for fixing critical issues.
-func (t *JanitorRun) createMaintenanceProposal(ctx context.Context, client *emergent.Client, report *Report) (*graph.GraphObject, error) {
+func (t *JanitorRun) createMaintenanceProposal(ctx context.Context, client *emergent.Client, report *Report, janitorAgentID string) (*graph.GraphObject, error) {
 	// Build description from critical issues
 	var criticalIssues []string
 	for _, issue := range report.Issues {
@@ -454,11 +465,26 @@ Fixing these issues will improve the consistency and reliability of the knowledg
 		"description": description,
 		"status":      "proposed",
 		"created_at":  time.Now().Format(time.RFC3339),
-		"created_by":  "janitor-agent",
+		"created_by":  "janitor",
 		"priority":    "high",
 	}
 
-	return client.CreateObject(ctx, emergent.TypeProposal, &key, props, nil)
+	// Create the proposal
+	proposal, err := client.CreateObject(ctx, emergent.TypeProposal, &key, props, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Link to janitor agent if provided
+	if janitorAgentID != "" {
+		_, err = client.CreateRelationship(ctx, emergent.RelProposedBy, proposal.ID, janitorAgentID, nil)
+		if err != nil {
+			t.logger.Warn("failed to link proposal to janitor agent", "error", err)
+			// Continue - proposal is created even if linking fails
+		}
+	}
+
+	return proposal, nil
 }
 
 // generateSummary creates a human-readable summary of the report.
@@ -501,4 +527,27 @@ func safeKey(key *string) string {
 		return "<unnamed>"
 	}
 	return *key
+}
+
+// ensureJanitorAgent gets or creates the janitor CodingAgent entity.
+func (t *JanitorRun) ensureJanitorAgent(ctx context.Context, client *emergent.Client) (*emergent.CodingAgent, error) {
+	agent := &emergent.CodingAgent{
+		Name:           "janitor",
+		DisplayName:    "Janitor Agent",
+		Type:           "ai",
+		Active:         true,
+		Specialization: "maintenance",
+		Skills:         []string{"validation", "compliance", "cleanup"},
+		Instructions: `The janitor agent maintains project health by:
+- Verifying artifact compliance with naming conventions
+- Identifying orphaned or disconnected entities
+- Detecting invalid state transitions
+- Flagging incomplete artifact hierarchies
+- Finding stale or abandoned changes
+
+The janitor creates maintenance proposals when critical issues are found.`,
+		Tags: []string{"system", "automation", "maintenance"},
+	}
+
+	return client.GetOrCreateCodingAgent(ctx, agent)
 }
