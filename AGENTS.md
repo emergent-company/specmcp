@@ -200,6 +200,38 @@ Scheduled runs check everything but don't auto-create proposals by default (only
 
 **Note**: Scheduled janitor runs are only supported in stdio mode. HTTP mode is stateless and doesn't support background tasks.
 
+### Logging and Monitoring
+
+The janitor logs structured summaries of its findings to the server logs (systemd journal, stderr), making it easy to monitor project health without calling the MCP tool.
+
+**Log entries include:**
+
+1. **Overall summary** - Total issues, critical count, warnings
+2. **Breakdown by type** - Naming violations, orphaned entities, missing relationships, etc.
+3. **Critical issue details** - Individual WARN-level logs for each critical issue
+
+**Example logs:**
+
+```json
+{"msg":"janitor run complete","total_issues":51,"critical":0,"warnings":51,"entity_count":6}
+{"msg":"janitor findings by type","naming_convention":10,"orphaned_entity":40,"missing_relationship":1}
+```
+
+**Monitoring commands:**
+
+```bash
+# View recent janitor runs
+sudo journalctl -u specmcp -n 100 | grep janitor
+
+# Monitor for critical issues
+sudo journalctl -u specmcp -f | grep "critical issues detected"
+
+# Track issue trends over time
+journalctl -u specmcp --since "1 week ago" | grep "janitor run complete"
+```
+
+See [docs/JANITOR_LOGGING.md](docs/JANITOR_LOGGING.md) for detailed logging documentation.
+
 
 ## HTTP Transport Details
 
