@@ -156,6 +156,9 @@ func (t *JanitorRun) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	// Generate summary
 	report.Summary = t.generateSummary(report)
 
+	// Log findings summary for visibility
+	t.logFindings(report)
+
 	// Create maintenance proposal if requested and critical issues exist
 	var proposalID string
 	if p.CreateProposal && report.CriticalIssues > 0 {
@@ -498,6 +501,51 @@ func (t *JanitorRun) generateSummary(report *Report) string {
 		report.CriticalIssues,
 		report.Warnings,
 		report.IssuesFound-report.CriticalIssues-report.Warnings)
+}
+
+// logFindings logs a summary of janitor findings for visibility.
+func (t *JanitorRun) logFindings(report *Report) {
+	// Group issues by type for easier understanding
+	issuesByType := make(map[string]int)
+	issuesBySeverity := make(map[string]int)
+
+	for _, issue := range report.Issues {
+		issuesByType[issue.Type]++
+		issuesBySeverity[issue.Severity]++
+	}
+
+	// Log overall summary
+	t.logger.Info("janitor run complete",
+		"total_issues", report.IssuesFound,
+		"critical", report.CriticalIssues,
+		"warnings", report.Warnings,
+		"entity_count", len(report.EntityCounts))
+
+	// Log breakdown by issue type if any issues found
+	if report.IssuesFound > 0 {
+		t.logger.Info("janitor findings by type",
+			"naming_convention", issuesByType["naming_convention"],
+			"orphaned_entity", issuesByType["orphaned_entity"],
+			"missing_relationship", issuesByType["missing_relationship"],
+			"stale_change", issuesByType["stale_change"],
+			"empty_change", issuesByType["empty_change"],
+			"invalid_state", issuesByType["invalid_state"])
+	}
+
+	// If there are critical issues, log them individually
+	if report.CriticalIssues > 0 {
+		t.logger.Warn("critical issues detected",
+			"count", report.CriticalIssues)
+		for _, issue := range report.Issues {
+			if issue.Severity == "critical" {
+				t.logger.Warn("critical issue",
+					"type", issue.Type,
+					"entity_type", issue.EntityType,
+					"entity_id", issue.EntityID,
+					"description", issue.Description)
+			}
+		}
+	}
 }
 
 // Utility functions
