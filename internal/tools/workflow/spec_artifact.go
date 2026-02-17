@@ -896,22 +896,51 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, client *em
 }
 
 // ensureRelationship creates a relationship only if one with the same type+src+dst
-// doesn't already exist. Returns (true, nil) if created, (false, nil) if already exists.
+// doesn't already exist. It resolves Canonical IDs to prevent duplicates across versions.
 func (t *SpecArtifact) ensureRelationship(ctx context.Context, client *emergent.Client, relType, srcID, dstID string) (bool, error) {
+	// 1. Resolve objects to get Canonical IDs
+	srcObj, err := client.GetObject(ctx, srcID)
+	if err != nil {
+		return false, fmt.Errorf("getting src object %s: %w", srcID, err)
+	}
+	dstObj, err := client.GetObject(ctx, dstID)
+	if err != nil {
+		return false, fmt.Errorf("getting dst object %s: %w", dstID, err)
+	}
+
+	srcCanID := srcObj.CanonicalID
+	if srcCanID == "" {
+		srcCanID = srcObj.ID
+	}
+	dstCanID := dstObj.CanonicalID
+	if dstCanID == "" {
+		dstCanID = dstObj.ID
+	}
+
+	// 2. Check for existing relationship using Canonical IDs
+	// This finds if ANY version of src is linked to ANY version of dst
+	// Note: We're checking existence on canonical IDs, but creation on specific IDs.
+	// This assumes the backend handles canonical-based existence checks or returns relationships for canonical queries.
+	// If the backend strictly matches srcID/dstID in ListRelationships, we might need to rely on the backend's dedup logic
+	// or check both specific and canonical if possible.
+	// Assuming Emergent supports querying by CanonicalID to see "conceptual" links.
 	existing, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
 		Type:  relType,
-		SrcID: srcID,
-		DstID: dstID,
+		SrcID: srcCanID,
+		DstID: dstCanID,
 		Limit: 1,
 	})
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("listing relationships: %w", err)
 	}
 	if len(existing) > 0 {
-		return false, nil // already exists
+		return false, nil // already exists conceptually
 	}
+
+	// 3. Create relationship on the specific version IDs requested
+	// We want the edge to point to the specific version snapshot
 	if _, err := client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
-		return false, err
+		return false, fmt.Errorf("creating relationship: %w", err)
 	}
 	return true, nil
 }
