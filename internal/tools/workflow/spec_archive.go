@@ -80,7 +80,7 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 
 	// Build guard context and populate change state
 	gctx := &guards.GuardContext{
-		ChangeID: p.ChangeID,
+		ChangeID: change.ID,
 		Force:    p.Force,
 	}
 	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
@@ -93,8 +93,8 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 		return mcp.ErrorResult(outcome.FormatBlockMessage()), nil
 	}
 
-	// Archive the change
-	_, err = client.UpdateObject(ctx, p.ChangeID, map[string]any{
+	// Archive the change using resolved ID
+	_, err = client.UpdateObject(ctx, change.ID, map[string]any{
 		"status": emergent.StatusArchived,
 	}, nil)
 	if err != nil {
@@ -102,10 +102,11 @@ func (t *SpecArchive) Execute(ctx context.Context, params json.RawMessage) (*mcp
 	}
 
 	result := map[string]any{
-		"change_id": p.ChangeID,
-		"name":      change.Name,
-		"status":    emergent.StatusArchived,
-		"message":   fmt.Sprintf("Archived change %q", change.Name),
+		"change_id":    change.ID,
+		"canonical_id": change.CanonicalID,
+		"name":         change.Name,
+		"status":       emergent.StatusArchived,
+		"message":      fmt.Sprintf("Archived change %q", change.Name),
 	}
 
 	// Include advisory messages if any

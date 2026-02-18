@@ -75,7 +75,7 @@ func (t *SpecVerify) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	}
 
 	// Build guard context for state
-	gctx := &guards.GuardContext{ChangeID: p.ChangeID}
+	gctx := &guards.GuardContext{ChangeID: change.ID}
 	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
 		return nil, fmt.Errorf("populating change state: %w", err)
 	}
@@ -89,10 +89,10 @@ func (t *SpecVerify) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	issues = append(issues, t.checkCompleteness(ctx, gctx)...)
 
 	// --- Dimension 2: Correctness ---
-	issues = append(issues, t.checkCorrectness(ctx, client, p.ChangeID, gctx)...)
+	issues = append(issues, t.checkCorrectness(ctx, client, change.ID, gctx)...)
 
 	// --- Dimension 3: Coherence ---
-	issues = append(issues, t.checkCoherence(ctx, client, p.ChangeID, gctx)...)
+	issues = append(issues, t.checkCoherence(ctx, client, change.ID, gctx)...)
 
 	// Build summary
 	criticalCount := 0
@@ -117,7 +117,7 @@ func (t *SpecVerify) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	}
 
 	result := map[string]any{
-		"change_id":   p.ChangeID,
+		"change_id":   change.ID,
 		"change_name": change.Name,
 		"status":      status,
 		"summary": map[string]any{
@@ -338,13 +338,13 @@ func (t *SpecVerify) checkCorrectness(ctx context.Context, client *emergent.Clie
 func (t *SpecVerify) checkCoherence(ctx context.Context, client *emergent.Client, changeID string, gctx *guards.GuardContext) []verifyIssue {
 	var issues []verifyIssue
 
-	// Check if change is governed by a constitution
-	govRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  emergent.RelGovernedBy,
-		SrcID: changeID,
-		Limit: 1,
+	// Check if change is governed by a constitution using GetObjectEdges
+	// for canonical-aware lookup instead of ListRelationships
+	govEdges, err := client.GetObjectEdges(ctx, changeID, &graph.GetObjectEdgesOptions{
+		Types:     []string{emergent.RelGovernedBy},
+		Direction: "outgoing",
 	})
-	if err == nil && len(govRels) == 0 && gctx.HasConstitution {
+	if err == nil && len(govEdges.Outgoing) == 0 && gctx.HasConstitution {
 		issues = append(issues, verifyIssue{
 			Dimension: "coherence",
 			Severity:  "WARNING",
@@ -355,20 +355,18 @@ func (t *SpecVerify) checkCoherence(ctx context.Context, client *emergent.Client
 
 	// Check pattern usage — if patterns exist, the change should use some
 	if gctx.PatternCount > 0 && gctx.HasDesign {
-		// Check if the design or any specs use patterns
-		designRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-			Type:  emergent.RelHasDesign,
-			SrcID: changeID,
-			Limit: 1,
+		// Check if the design uses patterns via GetObjectEdges
+		designEdges, err := client.GetObjectEdges(ctx, changeID, &graph.GetObjectEdgesOptions{
+			Types:     []string{emergent.RelHasDesign},
+			Direction: "outgoing",
 		})
-		if err == nil && len(designRels) > 0 {
-			designID := designRels[0].DstID
-			patternRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-				Type:  emergent.RelUsesPattern,
-				SrcID: designID,
-				Limit: 1,
+		if err == nil && len(designEdges.Outgoing) > 0 {
+			designID := designEdges.Outgoing[0].DstID
+			patternEdges, err := client.GetObjectEdges(ctx, designID, &graph.GetObjectEdgesOptions{
+				Types:     []string{emergent.RelUsesPattern},
+				Direction: "outgoing",
 			})
-			if err == nil && len(patternRels) == 0 {
+			if err == nil && len(patternEdges.Outgoing) == 0 {
 				issues = append(issues, verifyIssue{
 					Dimension: "coherence",
 					Severity:  "SUGGESTION",

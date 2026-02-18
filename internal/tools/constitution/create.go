@@ -135,15 +135,17 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("creating constitution: %w", err)
 	}
 
-	// Link patterns if specified (requires_pattern and forbids_pattern)
+	// Link patterns if specified (requires_pattern and forbids_pattern).
+	// Use HasRelationshipByEdges for canonical-aware dedup: after UpsertObject,
+	// obj.ID may be a new version, but prior relationships used the old version ID.
 	relCount := 0
 	for _, patternName := range p.PatternsRequired {
 		pattern, err := client.FindByTypeAndKey(ctx, emergent.TypePattern, patternName)
 		if err != nil || pattern == nil {
 			continue // skip patterns that don't exist yet
 		}
-		// Check if relationship already exists
-		exists, err := client.HasRelationship(ctx, emergent.RelRequiresPattern, obj.ID, pattern.ID)
+		patternIDs := emergent.NewIDSet(pattern.ID, pattern.CanonicalID)
+		exists, err := client.HasRelationshipByEdges(ctx, emergent.RelRequiresPattern, obj.ID, patternIDs)
 		if err != nil || exists {
 			continue
 		}
@@ -157,7 +159,8 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 		if err != nil || pattern == nil {
 			continue
 		}
-		exists, err := client.HasRelationship(ctx, emergent.RelForbidsPattern, obj.ID, pattern.ID)
+		patternIDs := emergent.NewIDSet(pattern.ID, pattern.CanonicalID)
+		exists, err := client.HasRelationshipByEdges(ctx, emergent.RelForbidsPattern, obj.ID, patternIDs)
 		if err != nil || exists {
 			continue
 		}
@@ -169,6 +172,7 @@ func (t *CreateConstitution) Execute(ctx context.Context, params json.RawMessage
 
 	return mcp.JSONResult(map[string]any{
 		"id":                    obj.ID,
+		"canonical_id":          obj.CanonicalID,
 		"name":                  p.Name,
 		"version":               p.Version,
 		"pattern_relationships": relCount,

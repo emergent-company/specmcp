@@ -457,8 +457,9 @@ func (t *GetPatterns) Execute(ctx context.Context, params json.RawMessage) (*mcp
 	patterns := make([]map[string]any, 0, len(objs))
 	for _, obj := range objs {
 		p := map[string]any{
-			"id":         obj.ID,
-			"properties": obj.Properties,
+			"id":           obj.ID,
+			"canonical_id": obj.CanonicalID,
+			"properties":   obj.Properties,
 		}
 		if obj.Key != nil {
 			p["name"] = *obj.Key
@@ -566,25 +567,45 @@ func (t *ImpactAnalysis) Execute(ctx context.Context, params json.RawMessage) (*
 		return nil, fmt.Errorf("expanding graph: %w", err)
 	}
 
-	// Build impact summary grouped by type
+	// Dedup nodes by CanonicalID to avoid inflated counts from multiple versions.
+	// Use NodeIndex for canonical-aware dedup and IDSet for root-skip.
+	nodeIdx := emergent.NewNodeIndex(expanded.Nodes)
+	rootIDs := emergent.NewIDSet(p.EntityID, root.CanonicalID)
+
 	typeGroups := make(map[string][]map[string]any)
+	seen := make(map[string]bool) // track by canonical ID to dedup
 	if expanded.Nodes != nil {
 		for _, node := range expanded.Nodes {
-			if node.ID == p.EntityID {
-				continue // skip the root
+			if rootIDs[node.ID] {
+				continue // skip the root (matches by any ID variant)
 			}
+			// Dedup by canonical ID: resolve through NodeIndex to get primary
+			primary := node
+			if resolved, ok := nodeIdx[node.ID]; ok {
+				primary = resolved
+			}
+			dedup := primary.CanonicalID
+			if dedup == "" {
+				dedup = primary.ID
+			}
+			if seen[dedup] {
+				continue
+			}
+			seen[dedup] = true
+
 			entry := map[string]any{
-				"id": node.ID,
+				"id":           primary.ID,
+				"canonical_id": primary.CanonicalID,
 			}
-			if node.Key != nil {
-				entry["name"] = *node.Key
+			if primary.Key != nil {
+				entry["name"] = *primary.Key
 			}
-			if node.Properties != nil {
-				if name, ok := node.Properties["name"]; ok {
+			if primary.Properties != nil {
+				if name, ok := primary.Properties["name"]; ok {
 					entry["name"] = name
 				}
 			}
-			typeGroups[node.Type] = append(typeGroups[node.Type], entry)
+			typeGroups[primary.Type] = append(typeGroups[primary.Type], entry)
 		}
 	}
 
@@ -612,9 +633,10 @@ func (t *ImpactAnalysis) Execute(ctx context.Context, params json.RawMessage) (*
 
 	return mcp.JSONResult(map[string]any{
 		"entity": map[string]any{
-			"id":   p.EntityID,
-			"type": root.Type,
-			"name": rootName,
+			"id":           root.ID,
+			"canonical_id": root.CanonicalID,
+			"type":         root.Type,
+			"name":         rootName,
 		},
 		"impact": map[string]any{
 			"total_affected": totalAffected,
@@ -681,10 +703,11 @@ func (t *ListChanges) Execute(ctx context.Context, params json.RawMessage) (*mcp
 	results := make([]map[string]any, 0, len(changes))
 	for _, ch := range changes {
 		results = append(results, map[string]any{
-			"id":     ch.ID,
-			"name":   ch.Name,
-			"status": ch.Status,
-			"tags":   ch.Tags,
+			"id":           ch.ID,
+			"canonical_id": ch.CanonicalID,
+			"name":         ch.Name,
+			"status":       ch.Status,
+			"tags":         ch.Tags,
 		})
 	}
 
@@ -784,11 +807,12 @@ func resolveEntity(ctx context.Context, client *emergent.Client, typeName, id, n
 // buildEntityResponse constructs the standard entity+relationships response.
 func buildEntityResponse(obj *graph.GraphObject, expanded *graph.GraphExpandResponse) map[string]any {
 	entity := map[string]any{
-		"id":         obj.ID,
-		"type":       obj.Type,
-		"properties": obj.Properties,
-		"labels":     obj.Labels,
-		"created_at": obj.CreatedAt,
+		"id":           obj.ID,
+		"canonical_id": obj.CanonicalID,
+		"type":         obj.Type,
+		"properties":   obj.Properties,
+		"labels":       obj.Labels,
+		"created_at":   obj.CreatedAt,
 	}
 	if obj.Key != nil {
 		entity["name"] = *obj.Key
@@ -801,16 +825,18 @@ func buildEntityResponse(obj *graph.GraphObject, expanded *graph.GraphExpandResp
 	// most once per relationship type.
 	relationships := make(map[string][]map[string]any)
 	if expanded != nil && expanded.Edges != nil {
-		// Build node lookup from ExpandNode types.
-		// Index by both ID and CanonicalID so that edges referencing
-		// canonical IDs can resolve to the latest-version node.
+		// Normalize edge IDs to match node primary IDs. This ensures that
+		// edge SrcID/DstID always reference the same ID as node.ID, making
+		// all subsequent lookups and root-matching consistent.
+		nodeIdx := emergent.NewNodeIndex(expanded.Nodes)
+		emergent.CanonicalizeEdgeIDs(expanded.Edges, nodeIdx)
+
+		// Build node lookup from ExpandNode types (single-indexed is enough
+		// after CanonicalizeEdgeIDs has normalized the edge endpoints).
 		nodeLookup := make(map[string]*graph.ExpandNode)
 		if expanded.Nodes != nil {
 			for _, node := range expanded.Nodes {
 				nodeLookup[node.ID] = node
-				if node.CanonicalID != "" && node.CanonicalID != node.ID {
-					nodeLookup[node.CanonicalID] = node
-				}
 			}
 		}
 
@@ -852,8 +878,9 @@ func buildEntityResponse(obj *graph.GraphObject, expanded *graph.GraphExpandResp
 			seen[dedupeKey] = true
 
 			entry := map[string]any{
-				"id":   other.ID,
-				"type": other.Type,
+				"id":           other.ID,
+				"canonical_id": other.CanonicalID,
+				"type":         other.Type,
 			}
 			if other.Key != nil {
 				entry["name"] = *other.Key

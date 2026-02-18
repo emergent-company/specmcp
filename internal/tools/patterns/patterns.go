@@ -73,18 +73,23 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 		entityType = obj.Type
 	}
 
-	// Get patterns already used by this entity
-	usedPatterns := make(map[string]bool)
-	usedRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  emergent.RelUsesPattern,
-		SrcID: p.EntityID,
-		Limit: 50,
+	// Get patterns already used by this entity.
+	// Use GetObjectEdges with obj.ID (resolved, current version) instead of
+	// p.EntityID (user-provided, potentially stale) to avoid missing edges.
+	rawUsedIDs := make(map[string]bool)
+	usedEdges, err := client.GetObjectEdges(ctx, obj.ID, &graph.GetObjectEdgesOptions{
+		Types:     []string{emergent.RelUsesPattern},
+		Direction: "outgoing",
 	})
 	if err == nil {
-		for _, rel := range usedRels {
-			usedPatterns[rel.DstID] = true
+		for _, rel := range usedEdges.Outgoing {
+			rawUsedIDs[rel.DstID] = true
 		}
 	}
+
+	// Build IDSet for the target entity so self-skip works regardless of
+	// which ID variant ListObjects returns.
+	entityIDs := emergent.NewIDSet(obj.ID, obj.CanonicalID)
 
 	// Find patterns used by other entities of the same type
 	sameTypeEntities, err := client.ListObjects(ctx, &graph.ListObjectsOptions{
@@ -96,10 +101,10 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 	}
 
 	// Count pattern usage across similar entities using batch edge lookups
-	patternUsage := make(map[string]int)
+	rawUsage := make(map[string]int)
 	for _, entity := range sameTypeEntities {
-		if entity.ID == p.EntityID {
-			continue
+		if entityIDs[entity.ID] {
+			continue // canonical-aware self-skip
 		}
 		edges, err := client.GetObjectEdges(ctx, entity.ID, &graph.GetObjectEdgesOptions{
 			Types:     []string{emergent.RelUsesPattern},
@@ -109,7 +114,7 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 			continue
 		}
 		for _, rel := range edges.Outgoing {
-			patternUsage[rel.DstID]++
+			rawUsage[rel.DstID]++
 		}
 	}
 
@@ -128,29 +133,51 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 				continue
 			}
 			for _, rel := range edges.Outgoing {
-				patternUsage[rel.DstID] += 10 // boost required patterns
+				rawUsage[rel.DstID] += 10 // boost required patterns
 			}
 		}
 	}
 
-	// Batch-fetch all discovered pattern objects in a single call.
-	// Use ObjectIndex for dual-indexed lookup (ID/CanonicalID) to handle
-	// the case where GetObjectEdges returns a different ID variant than GetObjects.
-	patternIDs := make([]string, 0, len(patternUsage))
-	for pid := range patternUsage {
-		if !usedPatterns[pid] {
-			patternIDs = append(patternIDs, pid)
-		}
+	// Batch-fetch ALL discovered pattern IDs (from both used and usage) in a single
+	// call. Include used IDs too so we can normalize both maps through ObjectIndex.
+	allPatternIDSet := make(map[string]bool, len(rawUsedIDs)+len(rawUsage))
+	for id := range rawUsedIDs {
+		allPatternIDSet[id] = true
+	}
+	for id := range rawUsage {
+		allPatternIDSet[id] = true
+	}
+	allPatternIDs := make([]string, 0, len(allPatternIDSet))
+	for id := range allPatternIDSet {
+		allPatternIDs = append(allPatternIDs, id)
 	}
 	var patternIdx emergent.ObjectIndex
-	if len(patternIDs) > 0 {
-		objs, err := client.GetObjects(ctx, patternIDs)
+	if len(allPatternIDs) > 0 {
+		objs, err := client.GetObjects(ctx, allPatternIDs)
 		if err == nil {
 			patternIdx = emergent.NewObjectIndex(objs)
 		}
 	}
 	if patternIdx == nil {
 		patternIdx = make(emergent.ObjectIndex)
+	}
+
+	// Normalize both maps through ObjectIndex so cross-ID variants merge.
+	usedPatterns := make(map[string]bool, len(rawUsedIDs))
+	for id := range rawUsedIDs {
+		if o := patternIdx[id]; o != nil {
+			usedPatterns[o.ID] = true
+		} else {
+			usedPatterns[id] = true
+		}
+	}
+	patternUsage := make(map[string]int, len(rawUsage))
+	for id, count := range rawUsage {
+		if o := patternIdx[id]; o != nil {
+			patternUsage[o.ID] += count
+		} else {
+			patternUsage[id] += count
+		}
 	}
 
 	// Build suggestions, excluding already-used patterns
@@ -164,8 +191,9 @@ func (t *SuggestPatterns) Execute(ctx context.Context, params json.RawMessage) (
 			continue
 		}
 		entry := map[string]any{
-			"id":    patternID,
-			"usage": usage,
+			"id":           info.ID,
+			"canonical_id": info.CanonicalID,
+			"usage":        usage,
 		}
 		if info.Key != nil {
 			entry["name"] = *info.Key
@@ -248,8 +276,11 @@ func (t *ApplyPattern) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(fmt.Sprintf("pattern not found: %v", err)), nil
 	}
 
-	// Check if already applied
-	already, err := client.HasRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID)
+	// Check if already applied using canonical-aware edge lookup.
+	// Build IDSet for the pattern covering both version and canonical IDs
+	// so we detect the relationship regardless of which ID variant was used.
+	patternIDs := emergent.NewIDSet(pattern.ID, pattern.CanonicalID)
+	already, err := client.HasRelationshipByEdges(ctx, emergent.RelUsesPattern, entity.ID, patternIDs)
 	if err != nil {
 		return nil, fmt.Errorf("checking existing relationship: %w", err)
 	}
@@ -257,16 +288,18 @@ func (t *ApplyPattern) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult("pattern is already applied to this entity"), nil
 	}
 
-	// Create the relationship
-	if _, err := client.CreateRelationship(ctx, emergent.RelUsesPattern, p.EntityID, p.PatternID, nil); err != nil {
+	// Create the relationship using current version IDs
+	if _, err := client.CreateRelationship(ctx, emergent.RelUsesPattern, entity.ID, pattern.ID, nil); err != nil {
 		return nil, fmt.Errorf("creating uses_pattern relationship: %w", err)
 	}
 
 	result := map[string]any{
-		"entity_id":   p.EntityID,
-		"entity_type": entity.Type,
-		"pattern_id":  p.PatternID,
-		"message":     "Pattern applied",
+		"entity_id":            p.EntityID,
+		"entity_canonical_id":  entity.CanonicalID,
+		"entity_type":          entity.Type,
+		"pattern_id":           p.PatternID,
+		"pattern_canonical_id": pattern.CanonicalID,
+		"message":              "Pattern applied",
 	}
 	if pattern.Key != nil {
 		result["pattern_name"] = *pattern.Key

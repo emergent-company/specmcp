@@ -63,6 +63,7 @@ func (c *Client) CreateChange(ctx context.Context, ch *Change) (*Change, error) 
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -77,6 +78,7 @@ func (c *Client) GetChange(ctx context.Context, id string) (*Change, error) {
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -94,6 +96,7 @@ func (c *Client) FindChange(ctx context.Context, name string) (*Change, error) {
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -119,6 +122,7 @@ func (c *Client) ListChanges(ctx context.Context, status string) ([]*Change, err
 			return nil, err
 		}
 		ch.ID = obj.ID
+		ch.CanonicalID = obj.CanonicalID
 		changes = append(changes, ch)
 	}
 	return changes, nil
@@ -148,6 +152,7 @@ func (c *Client) CreateProposal(ctx context.Context, changeID string, p *Proposa
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -174,6 +179,7 @@ func (c *Client) CreateSpec(ctx context.Context, changeID string, s *Spec) (*Spe
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -200,6 +206,7 @@ func (c *Client) CreateRequirement(ctx context.Context, specID string, r *Requir
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -226,6 +233,7 @@ func (c *Client) CreateScenario(ctx context.Context, requirementID string, s *Sc
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -252,6 +260,7 @@ func (c *Client) CreateDesign(ctx context.Context, changeID string, d *Design) (
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -365,6 +374,7 @@ func (c *Client) CreateApp(ctx context.Context, app *App) (*App, error) {
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -379,6 +389,7 @@ func (c *Client) GetApp(ctx context.Context, id string) (*App, error) {
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -399,6 +410,7 @@ func (c *Client) CreateDataModel(ctx context.Context, model *DataModel) (*DataMo
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -413,6 +425,7 @@ func (c *Client) GetDataModel(ctx context.Context, id string) (*DataModel, error
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }
 
@@ -490,6 +503,27 @@ func (c *Client) HasRelationship(ctx context.Context, relType, srcID, dstID stri
 	return len(rels) > 0, nil
 }
 
+// HasRelationshipByEdges checks whether a relationship of the given type exists
+// between src and dst using GetObjectEdges instead of ListRelationships.
+// This is canonical-ID-aware: it fetches outgoing edges from src, then checks
+// if any edge's DstID matches any ID in dstIDs (an IDSet covering both
+// version-specific and canonical IDs of the destination object).
+func (c *Client) HasRelationshipByEdges(ctx context.Context, relType string, srcID string, dstIDs IDSet) (bool, error) {
+	edges, err := c.GetObjectEdges(ctx, srcID, &graph.GetObjectEdgesOptions{
+		Types:     []string{relType},
+		Direction: "outgoing",
+	})
+	if err != nil {
+		return false, fmt.Errorf("getting edges for %s: %w", srcID, err)
+	}
+	for _, rel := range edges.Outgoing {
+		if dstIDs[rel.DstID] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // --- Agent ---
 
 // GetOrCreateAgent gets or creates an Agent by name.
@@ -509,6 +543,7 @@ func (c *Client) GetOrCreateAgent(ctx context.Context, agent *Agent) (*Agent, er
 				return nil, err
 			}
 			result.ID = obj.ID
+			result.CanonicalID = obj.CanonicalID
 			return result, nil
 		}
 	}
@@ -530,5 +565,6 @@ func (c *Client) GetOrCreateAgent(ctx context.Context, agent *Agent) (*Agent, er
 		return nil, err
 	}
 	result.ID = obj.ID
+	result.CanonicalID = obj.CanonicalID
 	return result, nil
 }

@@ -97,14 +97,14 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 	}
 
 	// Verify change exists and has a ready design
-	_, err = client.GetChange(ctx, p.ChangeID)
+	change, err := client.GetChange(ctx, p.ChangeID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
 	}
 
 	// Run artifact guards to ensure design is ready before generating tasks
 	gctx := &guards.GuardContext{
-		ChangeID:     p.ChangeID,
+		ChangeID:     change.ID,
 		ArtifactType: "task",
 	}
 	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
@@ -128,7 +128,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		default:
 		}
 
-		task, err := client.CreateTask(ctx, p.ChangeID, &emergent.Task{
+		task, err := client.CreateTask(ctx, change.ID, &emergent.Task{
 			Number:             td.Number,
 			Description:        td.Description,
 			TaskType:           td.TaskType,
@@ -143,6 +143,7 @@ func (t *GenerateTasks) Execute(ctx context.Context, params json.RawMessage) (*m
 		numberToID[td.Number] = task.ID
 		created = append(created, map[string]any{
 			"id":                task.ID,
+			"canonical_id":      task.CanonicalID,
 			"number":            td.Number,
 			"description":       td.Description,
 			"complexity_points": td.ComplexityPoints,
@@ -253,7 +254,13 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("creating client: %w", err)
 	}
 
-	tasks, err := client.ListTasks(ctx, p.ChangeID)
+	// Resolve change first so ListTasks uses the current version-specific ID
+	change, err := client.GetChange(ctx, p.ChangeID)
+	if err != nil {
+		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
+	}
+
+	tasks, err := client.ListTasks(ctx, change.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}
@@ -277,7 +284,7 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 	assignedSet := make(map[string]bool)      // task.IDs that have assignments
 
 	resp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
-		RootIDs:           []string{p.ChangeID},
+		RootIDs:           []string{change.ID},
 		Direction:         "outgoing",
 		MaxDepth:          2,
 		MaxNodes:          500,
@@ -358,6 +365,7 @@ func (t *GetAvailableTasks) Execute(ctx context.Context, params json.RawMessage)
 
 		available = append(available, map[string]any{
 			"id":                task.ID,
+			"canonical_id":      task.CanonicalID,
 			"number":            task.Number,
 			"description":       task.Description,
 			"task_type":         task.TaskType,
@@ -468,20 +476,20 @@ func (t *AssignTask) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 		return mcp.ErrorResult(fmt.Sprintf("task %s is %s, can only assign pending tasks", task.Number, task.Status)), nil
 	}
 
-	// Verify agent exists
-	_, err = client.GetObject(ctx, p.AgentID)
+	// Verify agent exists and resolve to current ID
+	agentObj, err := client.GetObject(ctx, p.AgentID)
 	if err != nil {
 		return mcp.ErrorResult(fmt.Sprintf("agent not found: %v", err)), nil
 	}
 
-	// Create assigned_to relationship
-	if _, err := client.CreateRelationship(ctx, emergent.RelAssignedTo, p.TaskID, p.AgentID, nil); err != nil {
+	// Create assigned_to relationship using resolved IDs
+	if _, err := client.CreateRelationship(ctx, emergent.RelAssignedTo, task.ID, agentObj.ID, nil); err != nil {
 		return nil, fmt.Errorf("creating assignment: %w", err)
 	}
 
 	// Update task status to in_progress with started_at
 	now := time.Now()
-	task, err = client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusInProgress, map[string]any{
+	task, err = client.UpdateTaskStatus(ctx, task.ID, emergent.StatusInProgress, map[string]any{
 		"started_at": now.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -489,12 +497,13 @@ func (t *AssignTask) Execute(ctx context.Context, params json.RawMessage) (*mcp.
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"task_id":    p.TaskID,
-		"agent_id":   p.AgentID,
-		"number":     task.Number,
-		"status":     task.Status,
-		"started_at": now.Format(time.RFC3339),
-		"message":    fmt.Sprintf("Assigned task %s to agent", task.Number),
+		"task_id":      task.ID,
+		"canonical_id": task.CanonicalID,
+		"agent_id":     agentObj.ID,
+		"number":       task.Number,
+		"status":       task.Status,
+		"started_at":   now.Format(time.RFC3339),
+		"message":      fmt.Sprintf("Assigned task %s to agent", task.Number),
 	})
 }
 
@@ -578,16 +587,18 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 		props["actual_hours"] = hours
 	}
 
-	task, err = client.UpdateTaskStatus(ctx, p.TaskID, emergent.StatusCompleted, props)
+	task, err = client.UpdateTaskStatus(ctx, task.ID, emergent.StatusCompleted, props)
 	if err != nil {
 		return nil, fmt.Errorf("completing task: %w", err)
 	}
 
 	// Find tasks that this task was blocking and check if they're now unblocked
-	// Use ExpandGraph to batch-fetch blocked tasks and all their blockers in one call
+	// Use ExpandGraph to batch-fetch blocked tasks and all their blockers in one call.
+	// Use task.ID (returned from UpdateTaskStatus) instead of p.TaskID because the
+	// update may have created a new version with a new ID.
 	unblocked := make([]map[string]any, 0)
 	expandResp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
-		RootIDs:           []string{p.TaskID},
+		RootIDs:           []string{task.ID},
 		Direction:         "both",
 		MaxDepth:          2,
 		MaxNodes:          200,
@@ -607,9 +618,9 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 
 		// Build an ID set for the completed task so edge matching works
 		// regardless of which ID variant the edge stores.
-		taskIDs := emergent.NewIDSet(p.TaskID, "")
-		// Also add canonical ID if available from the expand response
-		if node, ok := nodeIdx[p.TaskID]; ok {
+		// Use task.ID (post-update) as the primary, and resolve canonical from expand.
+		taskIDs := emergent.NewIDSet(task.ID, "")
+		if node, ok := nodeIdx[task.ID]; ok {
 			taskIDs = emergent.NewIDSet(node.ID, node.CanonicalID)
 		}
 
@@ -644,7 +655,8 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 			if !stillBlocked {
 				if node, ok := nodeMap[blockedID]; ok {
 					entry := map[string]any{
-						"id": blockedID,
+						"id":           blockedID,
+						"canonical_id": node.CanonicalID,
 					}
 					if node.Properties != nil {
 						if num, ok := node.Properties["number"].(string); ok {
@@ -661,7 +673,8 @@ func (t *CompleteTask) Execute(ctx context.Context, params json.RawMessage) (*mc
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"task_id":      p.TaskID,
+		"task_id":      task.ID,
+		"canonical_id": task.CanonicalID,
 		"number":       task.Number,
 		"status":       emergent.StatusCompleted,
 		"completed_at": now.Format(time.RFC3339),
@@ -715,8 +728,14 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("creating client: %w", err)
 	}
 
+	// Resolve change first so ListTasks uses the current version-specific ID
+	change, err := client.GetChange(ctx, p.ChangeID)
+	if err != nil {
+		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
+	}
+
 	// Get all tasks for the change
-	tasks, err := client.ListTasks(ctx, p.ChangeID)
+	tasks, err := client.ListTasks(ctx, change.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}
@@ -746,7 +765,7 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 	blocksGraph := make(map[string][]string) // blocker → []blocked
 	blockedBy := make(map[string][]string)   // blocked → []blockers
 	expandResp, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
-		RootIDs:           []string{p.ChangeID},
+		RootIDs:           []string{change.ID},
 		Direction:         "outgoing",
 		MaxDepth:          2,
 		MaxNodes:          500,
@@ -782,9 +801,12 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 				continue
 			}
 			for _, rel := range rels {
-				if _, ok := taskByID[rel.DstID]; ok {
-					blocksGraph[task.ID] = append(blocksGraph[task.ID], rel.DstID)
-					blockedBy[rel.DstID] = append(blockedBy[rel.DstID], task.ID)
+				// Resolve rel.DstID through taskByID to normalize to the task's
+				// primary ID. The relationship may store a canonical ID that differs
+				// from task.ID, but taskByID is dual-indexed by both.
+				if dstTask, ok := taskByID[rel.DstID]; ok {
+					blocksGraph[task.ID] = append(blocksGraph[task.ID], dstTask.ID)
+					blockedBy[dstTask.ID] = append(blockedBy[dstTask.ID], task.ID)
 				}
 			}
 		}
@@ -828,6 +850,7 @@ func (t *GetCriticalPath) Execute(ctx context.Context, params json.RawMessage) (
 		task := taskByID[current]
 		criticalPath = append(criticalPath, map[string]any{
 			"id":                task.ID,
+			"canonical_id":      task.CanonicalID,
 			"number":            task.Number,
 			"description":       task.Description,
 			"complexity_points": task.ComplexityPoints,

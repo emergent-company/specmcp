@@ -137,37 +137,41 @@ func IsWorkflowArtifactType(typeName string) bool {
 
 // Change represents a feature, bug fix, or refactoring effort.
 type Change struct {
-	ID         string   `json:"id,omitempty"`
-	Name       string   `json:"name"`
-	Status     string   `json:"status"`
-	BaseCommit string   `json:"base_commit,omitempty"`
-	Tags       []string `json:"tags,omitempty"`
+	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
+	Name        string   `json:"name"`
+	Status      string   `json:"status"`
+	BaseCommit  string   `json:"base_commit,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // Proposal represents the intent of a change.
 type Proposal struct {
-	ID     string   `json:"id,omitempty"`
-	Status string   `json:"status,omitempty"`
-	Intent string   `json:"intent"`
-	Scope  string   `json:"scope,omitempty"`
-	Impact string   `json:"impact,omitempty"`
-	Tags   []string `json:"tags,omitempty"`
+	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
+	Status      string   `json:"status,omitempty"`
+	Intent      string   `json:"intent"`
+	Scope       string   `json:"scope,omitempty"`
+	Impact      string   `json:"impact,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // Spec represents a domain-specific specification container.
 type Spec struct {
-	ID        string   `json:"id,omitempty"`
-	Status    string   `json:"status,omitempty"`
-	Name      string   `json:"name"`
-	Domain    string   `json:"domain,omitempty"`
-	Purpose   string   `json:"purpose,omitempty"`
-	DeltaType string   `json:"delta_type,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
+	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
+	Status      string   `json:"status,omitempty"`
+	Name        string   `json:"name"`
+	Domain      string   `json:"domain,omitempty"`
+	Purpose     string   `json:"purpose,omitempty"`
+	DeltaType   string   `json:"delta_type,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // Requirement represents a specific behavior the system must have.
 type Requirement struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Status      string   `json:"status,omitempty"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
@@ -178,20 +182,22 @@ type Requirement struct {
 
 // Scenario represents a concrete example of a requirement.
 type Scenario struct {
-	ID      string   `json:"id,omitempty"`
-	Status  string   `json:"status,omitempty"`
-	Name    string   `json:"name"`
-	Title   string   `json:"title,omitempty"`
-	Given   string   `json:"given,omitempty"`
-	When    string   `json:"when,omitempty"`
-	Then    string   `json:"then,omitempty"`
-	AndAlso []string `json:"and_also,omitempty"`
-	Tags    []string `json:"tags,omitempty"`
+	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
+	Status      string   `json:"status,omitempty"`
+	Name        string   `json:"name"`
+	Title       string   `json:"title,omitempty"`
+	Given       string   `json:"given,omitempty"`
+	When        string   `json:"when,omitempty"`
+	Then        string   `json:"then,omitempty"`
+	AndAlso     []string `json:"and_also,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // ScenarioStep represents a step in a complex scenario.
 type ScenarioStep struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Sequence    int      `json:"sequence"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags,omitempty"`
@@ -200,6 +206,7 @@ type ScenarioStep struct {
 // Design represents the technical approach for a change.
 type Design struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Status      string   `json:"status,omitempty"`
 	Approach    string   `json:"approach,omitempty"`
 	Decisions   string   `json:"decisions,omitempty"`
@@ -229,6 +236,7 @@ type Task struct {
 // Actor represents a user, role, or persona.
 type Actor struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name        string   `json:"name"`
 	DisplayName string   `json:"display_name,omitempty"`
 	Description string   `json:"description,omitempty"`
@@ -239,6 +247,7 @@ type Actor struct {
 // coding, maintenance, research, testing, deployment, analysis.
 type Agent struct {
 	ID                  string   `json:"id,omitempty"`
+	CanonicalID         string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name                string   `json:"name"`
 	DisplayName         string   `json:"display_name,omitempty"`
 	Type                string   `json:"type"`
@@ -254,6 +263,7 @@ type Agent struct {
 // Pattern represents a reusable implementation pattern.
 type Pattern struct {
 	ID            string   `json:"id,omitempty"`
+	CanonicalID   string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name          string   `json:"name"`
 	DisplayName   string   `json:"display_name,omitempty"`
 	Type          string   `json:"type"`
@@ -267,6 +277,7 @@ type Pattern struct {
 // Constitution represents project-wide principles.
 type Constitution struct {
 	ID                   string   `json:"id,omitempty"`
+	CanonicalID          string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name                 string   `json:"name"`
 	Version              string   `json:"version"`
 	Principles           string   `json:"principles,omitempty"`
@@ -281,6 +292,7 @@ type Constitution struct {
 // TestCase links scenarios to executable tests.
 type TestCase struct {
 	ID              string     `json:"id,omitempty"`
+	CanonicalID     string     `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name            string     `json:"name"`
 	TestFile        string     `json:"test_file,omitempty"`
 	TestFunction    string     `json:"test_function,omitempty"`
@@ -294,6 +306,7 @@ type TestCase struct {
 // APIContract represents a machine-readable API definition.
 type APIContract struct {
 	ID               string     `json:"id,omitempty"`
+	CanonicalID      string     `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name             string     `json:"name"`
 	Format           string     `json:"format"`
 	Version          string     `json:"version,omitempty"`
@@ -309,6 +322,7 @@ type APIContract struct {
 // Context represents a screen, modal, or interaction surface.
 type Context struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name        string   `json:"name"`
 	DisplayName string   `json:"display_name,omitempty"`
 	Type        string   `json:"type,omitempty"`
@@ -322,6 +336,7 @@ type Context struct {
 // UIComponent represents a reusable UI component.
 type UIComponent struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name        string   `json:"name"`
 	DisplayName string   `json:"display_name,omitempty"`
 	Type        string   `json:"type,omitempty"`
@@ -333,6 +348,7 @@ type UIComponent struct {
 // Action represents a user action or system operation.
 type Action struct {
 	ID           string   `json:"id,omitempty"`
+	CanonicalID  string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name         string   `json:"name"`
 	DisplayLabel string   `json:"display_label,omitempty"`
 	Type         string   `json:"type,omitempty"`
@@ -344,6 +360,7 @@ type Action struct {
 // DataModel represents a domain data type shared across the system.
 type DataModel struct {
 	ID          string   `json:"id,omitempty"`
+	CanonicalID string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name        string   `json:"name"`
 	DisplayName string   `json:"display_name,omitempty"`
 	Description string   `json:"description,omitempty"`
@@ -359,6 +376,7 @@ type DataModel struct {
 // App represents a deployable application in the monorepo.
 type App struct {
 	ID               string   `json:"id,omitempty"`
+	CanonicalID      string   `json:"-"` // From GraphObject.CanonicalID; not a property
 	Name             string   `json:"name"`
 	DisplayName      string   `json:"display_name,omitempty"`
 	AppType          string   `json:"app_type"`            // frontend, backend, desktop, mobile, cli, library
@@ -377,6 +395,7 @@ type App struct {
 // GraphSync tracks synchronization state.
 type GraphSync struct {
 	ID               string     `json:"id,omitempty"`
+	CanonicalID      string     `json:"-"` // From GraphObject.CanonicalID; not a property
 	LastSyncedCommit string     `json:"last_synced_commit,omitempty"`
 	LastSyncedAt     *time.Time `json:"last_synced_at,omitempty"`
 	Status           string     `json:"status"`
@@ -386,6 +405,7 @@ type GraphSync struct {
 // MaintenanceIssue represents a data integrity or compliance problem detected by the janitor.
 type MaintenanceIssue struct {
 	ID            string     `json:"id,omitempty"`
+	CanonicalID   string     `json:"-"` // From GraphObject.CanonicalID; not a property
 	Title         string     `json:"title"`
 	Description   string     `json:"description"`
 	Severity      string     `json:"severity"` // critical, warning, info
@@ -402,6 +422,7 @@ type MaintenanceIssue struct {
 // Can be code-focused (enhancement, refactor) or knowledge-focused (constitution_rule, pattern_proposal).
 type Improvement struct {
 	ID          string     `json:"id,omitempty"`
+	CanonicalID string     `json:"-"` // From GraphObject.CanonicalID; not a property
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
 	Domain      string     `json:"domain"`             // ui, ux, performance, security, api, data, testing, infrastructure, documentation, accessibility

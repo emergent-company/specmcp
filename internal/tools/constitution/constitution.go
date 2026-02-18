@@ -59,24 +59,31 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 		return nil, fmt.Errorf("creating client: %w", err)
 	}
 
-	// Get the constitution governing this change
-	constitutionRels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  emergent.RelGovernedBy,
-		SrcID: p.ChangeID,
-		Limit: 1,
+	// Resolve change to get current version ID
+	change, err := client.GetObject(ctx, p.ChangeID)
+	if err != nil {
+		return mcp.ErrorResult(fmt.Sprintf("change not found: %v", err)), nil
+	}
+
+	// Get the constitution governing this change using GetObjectEdges
+	// for canonical-aware lookup instead of ListRelationships
+	govEdges, err := client.GetObjectEdges(ctx, change.ID, &graph.GetObjectEdgesOptions{
+		Types:     []string{emergent.RelGovernedBy},
+		Direction: "outgoing",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("looking up constitution: %w", err)
 	}
-	if len(constitutionRels) == 0 {
+	if len(govEdges.Outgoing) == 0 {
 		return mcp.JSONResult(map[string]any{
-			"change_id": p.ChangeID,
-			"status":    "no_constitution",
-			"message":   "No constitution governs this change. Add one with spec_artifact.",
+			"change_id":    change.ID,
+			"canonical_id": change.CanonicalID,
+			"status":       "no_constitution",
+			"message":      "No constitution governs this change. Add one with spec_artifact.",
 		})
 	}
 
-	constitutionID := constitutionRels[0].DstID
+	constitutionID := govEdges.Outgoing[0].DstID
 	constitution, err := client.GetObject(ctx, constitutionID)
 	if err != nil {
 		return nil, fmt.Errorf("getting constitution: %w", err)
@@ -96,7 +103,7 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 
 	// Collect all entities that belong to this change (specs, contexts, components, actions)
 	// These are the entity types that can use patterns
-	patternEntities, err := t.collectPatternEntities(ctx, client, p.ChangeID)
+	patternEntities, err := t.collectPatternEntities(ctx, client, change.ID)
 	if err != nil {
 		return nil, fmt.Errorf("collecting entities: %w", err)
 	}
@@ -167,9 +174,11 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"change_id": p.ChangeID,
+		"change_id":    change.ID,
+		"canonical_id": change.CanonicalID,
 		"constitution": map[string]any{
 			"id":                 constitutionID,
+			"canonical_id":       constitution.CanonicalID,
 			"name":               constitutionName,
 			"required_patterns":  len(requiredPatterns),
 			"forbidden_patterns": len(forbiddenPatterns),
@@ -184,23 +193,21 @@ func (t *ValidateConstitution) Execute(ctx context.Context, params json.RawMessa
 }
 
 // getRelatedPatterns returns a map of pattern ID → name for patterns linked via relType.
-// Keys are the objects' primary IDs (from GetObjects) rather than relationship DstIDs
-// to avoid ID mismatch when comparing against getUsedPatterns results.
+// Uses GetObjectEdges for canonical-aware lookup instead of ListRelationships.
 func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, client *emergent.Client, srcID, relType string) (map[string]string, error) {
-	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  relType,
-		SrcID: srcID,
-		Limit: 50,
+	edges, err := client.GetObjectEdges(ctx, srcID, &graph.GetObjectEdgesOptions{
+		Types:     []string{relType},
+		Direction: "outgoing",
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(rels) == 0 {
+	if len(edges.Outgoing) == 0 {
 		return make(map[string]string), nil
 	}
 	// Batch-fetch all pattern objects
-	ids := make([]string, len(rels))
-	for i, rel := range rels {
+	ids := make([]string, len(edges.Outgoing))
+	for i, rel := range edges.Outgoing {
 		ids[i] = rel.DstID
 	}
 	objs, err := client.GetObjects(ctx, ids)
@@ -224,7 +231,7 @@ func (t *ValidateConstitution) getRelatedPatterns(ctx context.Context, client *e
 }
 
 // collectPatternEntities gathers all entities belonging to a change that can use patterns.
-// This includes: Specs → Contexts/Components/Actions (via implements), and direct relationships.
+// Uses IDSet for canonical-aware self-skip and dedup by CanonicalID.
 func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, client *emergent.Client, changeID string) ([]map[string]any, error) {
 	// Get all entities reachable from the change within 2 hops
 	expanded, err := client.ExpandGraph(ctx, &graph.GraphExpandRequest{
@@ -252,15 +259,36 @@ func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, clien
 		emergent.TypeSpec:        true,
 	}
 
+	// Build IDSet for change so self-skip works regardless of ID variant
+	changeIDs := emergent.NewIDSet(changeID, "")
+	if expanded.Nodes != nil {
+		for _, node := range expanded.Nodes {
+			if node.ID == changeID || node.CanonicalID == changeID {
+				changeIDs = emergent.NewIDSet(node.ID, node.CanonicalID)
+				break
+			}
+		}
+	}
+
+	// Dedup by CanonicalID to avoid processing multiple versions of the same entity
+	seen := make(map[string]bool)
 	entities := make([]map[string]any, 0)
 	if expanded.Nodes != nil {
 		for _, node := range expanded.Nodes {
-			if node.ID == changeID {
+			if changeIDs[node.ID] {
 				continue
 			}
 			if !patternTypes[node.Type] {
 				continue
 			}
+			dedupKey := node.CanonicalID
+			if dedupKey == "" {
+				dedupKey = node.ID
+			}
+			if seen[dedupKey] {
+				continue
+			}
+			seen[dedupKey] = true
 			name := ""
 			if node.Key != nil {
 				name = *node.Key
@@ -277,23 +305,23 @@ func (t *ValidateConstitution) collectPatternEntities(ctx context.Context, clien
 }
 
 // getUsedPatterns returns the IDs of patterns applied to an entity.
-// Returns resolved object IDs (from GetObjects) rather than raw relationship DstIDs
-// to ensure consistency with getRelatedPatterns lookups.
+// Uses GetObjectEdges for canonical-aware lookup instead of ListRelationships.
+// Returns resolved object IDs (from GetObjects) to ensure consistency with
+// getRelatedPatterns lookups.
 func (t *ValidateConstitution) getUsedPatterns(ctx context.Context, client *emergent.Client, entityID string) ([]string, error) {
-	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  emergent.RelUsesPattern,
-		SrcID: entityID,
-		Limit: 50,
+	edges, err := client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
+		Types:     []string{emergent.RelUsesPattern},
+		Direction: "outgoing",
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(rels) == 0 {
+	if len(edges.Outgoing) == 0 {
 		return nil, nil
 	}
 	// Batch-fetch pattern objects to get their resolved IDs
-	relIDs := make([]string, len(rels))
-	for i, rel := range rels {
+	relIDs := make([]string, len(edges.Outgoing))
+	for i, rel := range edges.Outgoing {
 		relIDs[i] = rel.DstID
 	}
 	objs, err := client.GetObjects(ctx, relIDs)

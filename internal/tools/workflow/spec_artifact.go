@@ -92,7 +92,7 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 
 	// Run workflow ordering guards
 	gctx := &guards.GuardContext{
-		ChangeID:     p.ChangeID,
+		ChangeID:     change.ID,
 		ArtifactType: p.ArtifactType,
 	}
 	if err := guards.PopulateChangeState(ctx, client, gctx); err != nil {
@@ -104,16 +104,16 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 		return mcp.ErrorResult(outcome.FormatBlockMessage()), nil
 	}
 
-	// Dispatch to type-specific handler
+	// Dispatch to type-specific handler using resolved change.ID
 	switch p.ArtifactType {
 	case "proposal":
-		return t.addProposal(ctx, client, p.ChangeID, p.Content)
+		return t.addProposal(ctx, client, change.ID, p.Content)
 	case "spec":
-		return t.addSpec(ctx, client, p.ChangeID, p.Content)
+		return t.addSpec(ctx, client, change.ID, p.Content)
 	case "design":
-		return t.addDesign(ctx, client, p.ChangeID, p.Content)
+		return t.addDesign(ctx, client, change.ID, p.Content)
 	case "task":
-		return t.addTask(ctx, client, p.ChangeID, p.Content)
+		return t.addTask(ctx, client, change.ID, p.Content)
 	case "requirement":
 		return t.addRequirement(ctx, client, p.Content)
 	case "scenario":
@@ -121,27 +121,27 @@ func (t *SpecArtifact) Execute(ctx context.Context, params json.RawMessage) (*mc
 	case "scenario_step":
 		return t.addScenarioStep(ctx, client, p.Content)
 	case "actor":
-		return t.addGenericEntity(ctx, client, emergent.TypeActor, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeActor, p.Content, nil, change.ID)
 	case "agent":
-		return t.addGenericEntity(ctx, client, emergent.TypeAgent, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeAgent, p.Content, nil, change.ID)
 	case "pattern":
-		return t.addGenericEntity(ctx, client, emergent.TypePattern, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypePattern, p.Content, nil, change.ID)
 	case "test_case":
 		return t.addTestCase(ctx, client, p.Content)
 	case "api_contract":
-		return t.addGenericEntity(ctx, client, emergent.TypeAPIContract, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeAPIContract, p.Content, nil, change.ID)
 	case "context":
-		return t.addGenericEntity(ctx, client, emergent.TypeContext, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeContext, p.Content, nil, change.ID)
 	case "ui_component":
-		return t.addGenericEntity(ctx, client, emergent.TypeUIComponent, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeUIComponent, p.Content, nil, change.ID)
 	case "action":
-		return t.addGenericEntity(ctx, client, emergent.TypeAction, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeAction, p.Content, nil, change.ID)
 	case "data_model":
-		return t.addGenericEntity(ctx, client, emergent.TypeDataModel, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeDataModel, p.Content, nil, change.ID)
 	case "app":
-		return t.addGenericEntity(ctx, client, emergent.TypeApp, p.Content, nil, p.ChangeID)
+		return t.addGenericEntity(ctx, client, emergent.TypeApp, p.Content, nil, change.ID)
 	case "constitution":
-		return t.addConstitution(ctx, client, p.ChangeID, p.Content)
+		return t.addConstitution(ctx, client, change.ID, p.Content)
 	default:
 		return mcp.ErrorResult(fmt.Sprintf("unsupported artifact type: %s", p.ArtifactType)), nil
 	}
@@ -169,9 +169,10 @@ func (t *SpecArtifact) addProposal(ctx context.Context, client *emergent.Client,
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"type":    "proposal",
-		"id":      proposal.ID,
-		"message": "Created proposal",
+		"type":         "proposal",
+		"id":           proposal.ID,
+		"canonical_id": proposal.CanonicalID,
+		"message":      "Created proposal",
 	})
 }
 
@@ -189,10 +190,11 @@ func (t *SpecArtifact) addSpec(ctx context.Context, client *emergent.Client, cha
 	}
 
 	result := map[string]any{
-		"type":    "spec",
-		"id":      spec.ID,
-		"name":    spec.Name,
-		"message": fmt.Sprintf("Created spec %q", spec.Name),
+		"type":         "spec",
+		"id":           spec.ID,
+		"canonical_id": spec.CanonicalID,
+		"name":         spec.Name,
+		"message":      fmt.Sprintf("Created spec %q", spec.Name),
 	}
 
 	// Create nested requirements if provided
@@ -215,8 +217,9 @@ func (t *SpecArtifact) addSpec(ctx context.Context, client *emergent.Client, cha
 			}
 
 			reqResult := map[string]any{
-				"id":   req.ID,
-				"name": req.Name,
+				"id":           req.ID,
+				"canonical_id": req.CanonicalID,
+				"name":         req.Name,
 			}
 
 			// Create nested scenarios for this requirement
@@ -239,8 +242,9 @@ func (t *SpecArtifact) addSpec(ctx context.Context, client *emergent.Client, cha
 						return nil, fmt.Errorf("creating scenario: %w", err)
 					}
 					scenResults = append(scenResults, map[string]any{
-						"id":   scen.ID,
-						"name": scen.Name,
+						"id":           scen.ID,
+						"canonical_id": scen.CanonicalID,
+						"name":         scen.Name,
 					})
 				}
 				reqResult["scenarios"] = scenResults
@@ -276,9 +280,10 @@ func (t *SpecArtifact) addDesign(ctx context.Context, client *emergent.Client, c
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"type":    "design",
-		"id":      design.ID,
-		"message": "Created design",
+		"type":         "design",
+		"id":           design.ID,
+		"canonical_id": design.CanonicalID,
+		"message":      "Created design",
 	})
 }
 
@@ -298,12 +303,13 @@ func (t *SpecArtifact) addTask(ctx context.Context, client *emergent.Client, cha
 	}
 
 	result := map[string]any{
-		"type":        "task",
-		"id":          task.ID,
-		"number":      task.Number,
-		"description": task.Description,
-		"status":      task.Status,
-		"message":     fmt.Sprintf("Created task %s", task.Number),
+		"type":         "task",
+		"id":           task.ID,
+		"canonical_id": task.CanonicalID,
+		"number":       task.Number,
+		"description":  task.Description,
+		"status":       task.Status,
+		"message":      fmt.Sprintf("Created task %s", task.Number),
 	}
 
 	// Create blocking relationships if specified
@@ -360,10 +366,11 @@ func (t *SpecArtifact) addRequirement(ctx context.Context, client *emergent.Clie
 	}
 
 	result := map[string]any{
-		"type":    "requirement",
-		"id":      req.ID,
-		"name":    req.Name,
-		"message": fmt.Sprintf("Created requirement %q", req.Name),
+		"type":         "requirement",
+		"id":           req.ID,
+		"canonical_id": req.CanonicalID,
+		"name":         req.Name,
+		"message":      fmt.Sprintf("Created requirement %q", req.Name),
 	}
 	if parentReverted {
 		result["parent_reverted"] = true
@@ -400,10 +407,11 @@ func (t *SpecArtifact) addScenario(ctx context.Context, client *emergent.Client,
 	}
 
 	result := map[string]any{
-		"type":    "scenario",
-		"id":      scen.ID,
-		"name":    scen.Name,
-		"message": fmt.Sprintf("Created scenario %q", scen.Name),
+		"type":         "scenario",
+		"id":           scen.ID,
+		"canonical_id": scen.CanonicalID,
+		"name":         scen.Name,
+		"message":      fmt.Sprintf("Created scenario %q", scen.Name),
 	}
 	if parentReverted {
 		result["parent_reverted"] = true
@@ -451,9 +459,10 @@ func (t *SpecArtifact) addScenarioStep(ctx context.Context, client *emergent.Cli
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"type":    "scenario_step",
-		"id":      obj.ID,
-		"message": "Created scenario step",
+		"type":         "scenario_step",
+		"id":           obj.ID,
+		"canonical_id": obj.CanonicalID,
+		"message":      "Created scenario step",
 	})
 }
 
@@ -485,10 +494,11 @@ func (t *SpecArtifact) addTestCase(ctx context.Context, client *emergent.Client,
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"type":    "test_case",
-		"id":      obj.ID,
-		"name":    key,
-		"message": fmt.Sprintf("Created test case %q", key),
+		"type":         "test_case",
+		"id":           obj.ID,
+		"canonical_id": obj.CanonicalID,
+		"name":         key,
+		"message":      fmt.Sprintf("Created test case %q", key),
 	})
 }
 
@@ -517,10 +527,11 @@ func (t *SpecArtifact) addConstitution(ctx context.Context, client *emergent.Cli
 	}
 
 	return mcp.JSONResult(map[string]any{
-		"type":    "constitution",
-		"id":      obj.ID,
-		"name":    key,
-		"message": fmt.Sprintf("Created constitution %q", key),
+		"type":         "constitution",
+		"id":           obj.ID,
+		"canonical_id": obj.CanonicalID,
+		"name":         key,
+		"message":      fmt.Sprintf("Created constitution %q", key),
 	})
 }
 
@@ -620,11 +631,12 @@ func (t *SpecArtifact) addGenericEntity(ctx context.Context, client *emergent.Cl
 	}
 
 	result := map[string]any{
-		"type":    typeName,
-		"id":      obj.ID,
-		"name":    key,
-		"version": obj.Version,
-		"message": fmt.Sprintf("%s %s %q", action, typeName, key),
+		"type":         typeName,
+		"id":           obj.ID,
+		"canonical_id": obj.CanonicalID,
+		"name":         key,
+		"version":      obj.Version,
+		"message":      fmt.Sprintf("%s %s %q", action, typeName, key),
 	}
 	if changeID != "" {
 		result["change_tracking"] = changeRelType
@@ -896,9 +908,11 @@ func (t *SpecArtifact) createEntityRelationships(ctx context.Context, client *em
 }
 
 // ensureRelationship creates a relationship only if one with the same type+src+dst
-// doesn't already exist. It resolves Canonical IDs to prevent duplicates across versions.
+// doesn't already exist. It uses GetObjectEdges with IDSet for canonical-aware
+// dedup — this avoids the problem where ListRelationships does strict ID matching
+// and misses relationships created with a different ID variant.
 func (t *SpecArtifact) ensureRelationship(ctx context.Context, client *emergent.Client, relType, srcID, dstID string) (bool, error) {
-	// 1. Resolve objects to get Canonical IDs
+	// 1. Resolve objects to get current IDs and canonical IDs
 	srcObj, err := client.GetObject(ctx, srcID)
 	if err != nil {
 		return false, fmt.Errorf("getting src object %s: %w", srcID, err)
@@ -908,54 +922,36 @@ func (t *SpecArtifact) ensureRelationship(ctx context.Context, client *emergent.
 		return false, fmt.Errorf("getting dst object %s: %w", dstID, err)
 	}
 
-	srcCanID := srcObj.CanonicalID
-	if srcCanID == "" {
-		srcCanID = srcObj.ID
-	}
-	dstCanID := dstObj.CanonicalID
-	if dstCanID == "" {
-		dstCanID = dstObj.ID
-	}
-
-	// 2. Check for existing relationship using Canonical IDs
-	// This finds if ANY version of src is linked to ANY version of dst
-	// Note: We're checking existence on canonical IDs, but creation on specific IDs.
-	// This assumes the backend handles canonical-based existence checks or returns relationships for canonical queries.
-	// If the backend strictly matches srcID/dstID in ListRelationships, we might need to rely on the backend's dedup logic
-	// or check both specific and canonical if possible.
-	// Assuming Emergent supports querying by CanonicalID to see "conceptual" links.
-	existing, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  relType,
-		SrcID: srcCanID,
-		DstID: dstCanID,
-		Limit: 1,
-	})
+	// 2. Check for existing relationship using edge-based lookup with IDSet.
+	// Build an IDSet for the destination covering both version and canonical IDs
+	// so we detect the relationship regardless of which ID variant was used.
+	dstIDs := emergent.NewIDSet(dstObj.ID, dstObj.CanonicalID)
+	exists, err := client.HasRelationshipByEdges(ctx, relType, srcObj.ID, dstIDs)
 	if err != nil {
-		return false, fmt.Errorf("listing relationships: %w", err)
+		return false, fmt.Errorf("checking existing relationship: %w", err)
 	}
-	if len(existing) > 0 {
-		return false, nil // already exists conceptually
+	if exists {
+		return false, nil // already exists
 	}
 
-	// 3. Create relationship on the specific version IDs requested
-	// We want the edge to point to the specific version snapshot
-	if _, err := client.CreateRelationship(ctx, relType, srcID, dstID, nil); err != nil {
+	// 3. Create relationship using current version IDs
+	if _, err := client.CreateRelationship(ctx, relType, srcObj.ID, dstObj.ID, nil); err != nil {
 		return false, fmt.Errorf("creating relationship: %w", err)
 	}
 	return true, nil
 }
 
-// hasRelType checks if a change has at least one outgoing relationship of the given type.
-func (t *SpecArtifact) hasRelType(ctx context.Context, client *emergent.Client, changeID, relType string) (bool, error) {
-	rels, err := client.ListRelationships(ctx, &graph.ListRelationshipsOptions{
-		Type:  relType,
-		SrcID: changeID,
-		Limit: 1,
+// hasRelType checks if an entity has at least one outgoing relationship of the given type.
+// Uses GetObjectEdges which is more reliable with canonical ID resolution than ListRelationships.
+func (t *SpecArtifact) hasRelType(ctx context.Context, client *emergent.Client, entityID, relType string) (bool, error) {
+	edges, err := client.GetObjectEdges(ctx, entityID, &graph.GetObjectEdgesOptions{
+		Types:     []string{relType},
+		Direction: "outgoing",
 	})
 	if err != nil {
 		return false, err
 	}
-	return len(rels) > 0, nil
+	return len(edges.Outgoing) > 0, nil
 }
 
 // --- Helpers ---

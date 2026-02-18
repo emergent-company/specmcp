@@ -145,15 +145,17 @@ func (t *SpecNew) Execute(ctx context.Context, params json.RawMessage) (*mcp.Too
 
 	result := map[string]any{
 		"change": map[string]any{
-			"id":     change.ID,
-			"name":   change.Name,
-			"status": change.Status,
+			"id":           change.ID,
+			"canonical_id": change.CanonicalID,
+			"name":         change.Name,
+			"status":       change.Status,
 		},
 		"proposal": map[string]any{
-			"id":     proposal.ID,
-			"intent": proposal.Intent,
-			"scope":  proposal.Scope,
-			"impact": proposal.Impact,
+			"id":           proposal.ID,
+			"canonical_id": proposal.CanonicalID,
+			"intent":       proposal.Intent,
+			"scope":        proposal.Scope,
+			"impact":       proposal.Impact,
 		},
 		"message": fmt.Sprintf("Created change %q with proposal", p.Name),
 	}

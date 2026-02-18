@@ -120,9 +120,19 @@ func (t *Search) Execute(ctx context.Context, params json.RawMessage) (*mcp.Tool
 	})
 
 	if err == nil && resp.Total > 0 {
-		// FTS worked — filter out inactive entities and return results
+		// FTS worked — filter out inactive entities, dedup by CanonicalID, and return
 		results := make([]map[string]any, 0, len(resp.Data))
+		seen := make(map[string]bool)
 		for _, item := range resp.Data {
+			// Dedup by CanonicalID: FTS may return multiple versions of the same entity
+			dedupKey := item.Object.CanonicalID
+			if dedupKey == "" {
+				dedupKey = item.Object.ID
+			}
+			if seen[dedupKey] {
+				continue
+			}
+			seen[dedupKey] = true
 			if isActive(item.Object) {
 				results = append(results, buildSearchResult(item.Object, item.Score))
 			}
@@ -206,14 +216,25 @@ func (t *Search) fallbackSearch(ctx context.Context, client *emergent.Client, qu
 					if id, ok := r["id"].(string); ok {
 						seen[id] = true
 					}
+					// Also track canonical_id for cross-version dedup
+					if cid, ok := r["canonical_id"].(string); ok && cid != "" {
+						seen[cid] = true
+					}
 				}
 				for _, obj := range objs2 {
 					if len(results) >= limit {
 						break
 					}
-					if seen[obj.ID] {
+					// Dedup using both version and canonical IDs
+					dedupKey := obj.CanonicalID
+					if dedupKey == "" {
+						dedupKey = obj.ID
+					}
+					if seen[obj.ID] || seen[dedupKey] {
 						continue
 					}
+					seen[obj.ID] = true
+					seen[dedupKey] = true
 					if isActive(obj) && matchesQuery(obj, queryTerms) {
 						results = append(results, buildSearchResult(obj, 0))
 					}
